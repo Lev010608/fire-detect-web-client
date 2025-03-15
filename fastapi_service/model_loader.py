@@ -1,5 +1,5 @@
 import os
-from ultralytics.models.yolov10 import YOLOv10
+from ultralytics.models.yolov10 import YOLOv10  # 使用正确的YOLOv10类
 
 # 获取当前脚本的绝对路径
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -10,8 +10,16 @@ model_path = os.path.join(current_dir, '..', 'runs', 'detect', 'exp', 'weights',
 # 加载模型
 def load_model(model_path=model_path):
     print(f"Loading YOLOv10 model from {model_path}...")
-    model = YOLOv10(model_path)  # 正确地传递模型路径给YOLOv10类
-    return model
+    try:
+        model = YOLOv10(model_path, task='detect')  # 指定task为detect
+        # 预热模型
+        model(np.zeros((48, 48, 3)))
+        print("Model loaded successfully!")
+        return model
+    except Exception as e:
+        print(f"Error loading model: {e}")
+        raise
 
 # 在服务启动时加载模型
-yolo_model = load_model()  # 这里会自动加载模型
+import numpy as np
+yolo_model = load_model()
