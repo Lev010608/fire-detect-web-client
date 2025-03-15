@@ -5,7 +5,6 @@ from model_loader import yolo_model
 from predictor import run_inference  # 引入run_inference函数
 import os
 from tempfile import NamedTemporaryFile
-import shutil
 
 app = FastAPI()
 

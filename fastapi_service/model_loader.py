@@ -10,7 +10,7 @@ model_path = os.path.join(current_dir, '..', 'runs', 'detect', 'exp', 'weights',
 # 加载模型
 def load_model(model_path=model_path):
     print(f"Loading YOLOv10 model from {model_path}...")
-    model = YOLOv10(model=model_path)  # 加载模型
+    model = YOLOv10(model_path)  # 正确地传递模型路径给YOLOv10类
     return model
 
 # 在服务启动时加载模型
