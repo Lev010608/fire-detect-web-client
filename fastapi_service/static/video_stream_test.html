@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YOLOv10 Video Stream Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        h1 {
+            color: #333;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background-color: white;
+            padding: 20px;
+            border-radius: 5px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        .video-container {
+            margin-top: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        #video-display {
+            max-width: 100%;
+            border: 1px solid #ddd;
+            margin-bottom: 10px;
+        }
+        .controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        button {
+            padding: 8px 16px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+        .upload-section {
+            margin-bottom: 20px;
+        }
+        .log-section {
+            margin-top: 20px;
+        }
+        #log {
+            width: 100%;
+            height: 200px;
+            overflow-y: auto;
+            border: 1px solid #ddd;
+            padding: 10px;
+            background-color: #f9f9f9;
+            font-family: monospace;
+        }
+        .progress-container {
+            width: 100%;
+            margin-top: 20px;
+        }
+        progress {
+            width: 100%;
+            height: 20px;
+        }
+        .stats {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>YOLOv10 视频流检测测试</h1>
+
+        <div class="upload-section">
+            <h2>上传视频文件</h2>
+            <input type="file" id="video-upload" accept="video/*">
+            <button id="upload-btn">上传并处理</button>
+        </div>
+
+        <div class="video-container">
+            <h2>检测结果</h2>
+            <img id="video-display" src="" alt="检测结果将显示在这里">
+
+            <div class="controls">
+                <button id="connect-btn">连接WebSocket</button>
+                <button id="disconnect-btn" disabled>断开连接</button>
+                <button id="stop-btn" disabled>停止处理</button>
+            </div>
+
+            <div class="progress-container">
+                <progress id="processing-progress" value="0" max="100"></progress>
+                <div class="stats">
+                    <span id="progress-text">0/0 (0%)</span>
+                    <span id="detection-count">检测到: 0 个物体</span>
+                    <span id="inference-time">推理时间: 0 ms</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="log-section">
+            <h2>日志</h2>
+            <div id="log"></div>
+        </div>
+    </div>
+
+    <script>
+        // WebSocket 连接
+        let ws = null;
+        let videoData = null;
+        let videoPath = null;
+        let outputPath = null;
+
+        // DOM 元素
+        const connectBtn = document.getElementById('connect-btn');
+        const disconnectBtn = document.getElementById('disconnect-btn');
+        const stopBtn = document.getElementById('stop-btn');
+        const uploadBtn = document.getElementById('upload-btn');
+        const videoUpload = document.getElementById('video-upload');
+        const videoDisplay = document.getElementById('video-display');
+        const log = document.getElementById('log');
+        const progressBar = document.getElementById('processing-progress');
+        const progressText = document.getElementById('progress-text');
+        const detectionCount = document.getElementById('detection-count');
+        const inferenceTime = document.getElementById('inference-time');
+
+        // 日志函数
+        function logMessage(message, isError = false) {
+            const logItem = document.createElement('div');
+            logItem.textContent = `${new Date().toLocaleTimeString()} - ${message}`;
+            if (isError) {
+                logItem.style.color = 'red';
+            }
+            log.appendChild(logItem);
+            log.scrollTop = log.scrollHeight;
+        }
+
+        // 连接 WebSocket
+        connectBtn.addEventListener('click', () => {
+            if (ws) {
+                logMessage('WebSocket 已连接');
+                return;
+            }
+
+            ws = new WebSocket(`ws://${window.location.host}/ws/video_stream`);
+
+            ws.onopen = (event) => {
+                logMessage('WebSocket 连接已建立');
+                connectBtn.disabled = true;
+                disconnectBtn.disabled = false;
+
+                // 如果已上传视频，发送处理命令
+                if (videoPath) {
+                    sendVideoPathCommand();
+                }
+            };
+
+            ws.onmessage = (event) => {
+                const message = JSON.parse(event.data);
+
+                switch (message.type) {
+                    case 'connection_established':
+                        logMessage(`连接已建立，客户端ID: ${message.client_id}`);
+                        break;
+
+                    case 'video_info':
+                        logMessage(`视频信息: ${message.width}x${message.height}, FPS: ${message.fps}, 总帧数: ${message.total_frames}`);
+                        progressBar.max = message.total_frames;
+                        stopBtn.disabled = false;
+                        break;
+
+                    case 'frame_result':
+                        // 更新视频帧
+                        videoDisplay.src = `data:image/jpeg;base64,${message.annotated_frame}`;
+
+                        // 更新进度
+                        if (message.progress) {
+                            progressBar.value = message.progress.current;
+                            progressText.textContent = `${message.progress.current}/${message.progress.total} (${message.progress.percent}%)`;
+                        }
+
+                        // 更新检测计数
+                        detectionCount.textContent = `检测到: ${message.detection_count} 个物体`;
+
+                        // 更新推理时间
+                        inferenceTime.textContent = `推理时间: ${message.inference_time} ms`;
+                        break;
+
+                    case 'processing_started':
+                        logMessage(`开始处理视频: ${message.video_path}`);
+                        if (message.save_output) {
+                            logMessage(`输出将保存到: ${message.output_path}`);
+                        }
+                        break;
+
+                    case 'processing_complete':
+                        logMessage(`处理完成，共处理 ${message.frames_processed} 帧`);
+                        if (message.output_path) {
+                            logMessage(`输出已保存到: ${message.output_path}`);
+                        }
+                        stopBtn.disabled = true;
+                        break;
+
+                    case 'error':
+                        logMessage(`错误: ${message.message}`, true);
+                        break;
+
+                    default:
+                        logMessage(`收到消息: ${JSON.stringify(message)}`);
+                }
+            };
+
+            ws.onclose = (event) => {
+                logMessage('WebSocket 连接已关闭');
+                ws = null;
+                connectBtn.disabled = false;
+                disconnectBtn.disabled = true;
+                stopBtn.disabled = true;
+            };
+
+            ws.onerror = (error) => {
+                logMessage(`WebSocket 错误: ${error}`, true);
+            };
+        });
+
+        // 断开 WebSocket
+        disconnectBtn.addEventListener('click', () => {
+            if (ws) {
+                ws.close();
+                ws = null;
+            }
+            connectBtn.disabled = false;
+            disconnectBtn.disabled = true;
+            stopBtn.disabled = true;
+        });
+
+        // 停止处理
+        stopBtn.addEventListener('click', () => {
+            if (ws) {
+                ws.send(JSON.stringify({
+                    type: 'stop'
+                }));
+                logMessage('已发送停止处理命令');
+                stopBtn.disabled = true;
+            }
+        });
+
+        // 上传视频
+        uploadBtn.addEventListener('click', async () => {
+            if (!videoUpload.files.length) {
+                logMessage('请先选择视频文件', true);
+                return;
+            }
+
+            const file = videoUpload.files[0];
+            const formData = new FormData();
+            formData.append('file', file);
+
+            try {
+                logMessage(`正在上传视频: ${file.name}...`);
+                uploadBtn.disabled = true;
+
+                const response = await fetch('/stream_video', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!response.ok) {
+                    throw new Error(`上传失败: ${response.status} ${response.statusText}`);
+                }
+
+                const result = await response.json();
+                logMessage(`上传成功: ${result.message}`);
+
+                // 保存路径信息
+                videoPath = result.video_path;
+                outputPath = result.output_path;
+
+                // 如果已连接WebSocket，发送处理命令
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                    sendVideoPathCommand();
+                } else {
+                    logMessage('请连接WebSocket以开始处理');
+                }
+            } catch (error) {
+                logMessage(`上传错误: ${error.message}`, true);
+            } finally {
+                uploadBtn.disabled = false;
+            }
+        });
+
+        // 发送视频路径命令
+        function sendVideoPathCommand() {
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                logMessage('WebSocket未连接，无法发送命令', true);
+                return;
+            }
+
+            if (!videoPath) {
+                logMessage('没有可用的视频路径', true);
+                return;
+            }
+
+            ws.send(JSON.stringify({
+                type: 'video_path',
+                path: videoPath,
+                save_output: true,
+                output_path: outputPath
+            }));
+
+            logMessage(`已发送视频处理命令: ${videoPath}`);
+        }
+
+        // 页面加载时初始化
+        window.addEventListener('load', () => {
+            logMessage('页面已加载，请上传视频或连接WebSocket');
+        });
+
+        // 页面关闭时清理
+        window.addEventListener('beforeunload', () => {
+            if (ws) {
+                ws.close();
+            }
+        });
+    </script>
+</body>
+</html>

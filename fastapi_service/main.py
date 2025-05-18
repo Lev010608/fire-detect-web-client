@@ -13,6 +13,25 @@ import sys
 import logging
 import time
 
+# 添加WebSocket支持
+from fastapi import WebSocket, WebSocketDisconnect
+from typing import Dict, Optional
+import uuid
+import json
+import base64
+
+# 导入视频流处理器
+try:
+    # 相对导入
+    from .stream_processor import VideoStreamProcessor
+except ImportError:
+    try:
+        # 从包导入
+        from fastapi_service.stream_processor import VideoStreamProcessor
+    except ImportError:
+        # 直接导入（与文件同目录）
+        from stream_processor import VideoStreamProcessor
+
 # 配置日志
 logging.basicConfig(level=logging.INFO,
                     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -50,6 +69,17 @@ import shutil
 
 app = FastAPI()
 
+# 添加静态文件服务 ================
+from fastapi.staticfiles import StaticFiles
+
+# 创建静态文件目录
+static_dir = os.path.join(current_dir, "static")
+os.makedirs(static_dir, exist_ok=True)
+
+# 挂载静态文件目录
+app.mount("/static", StaticFiles(directory=static_dir), name="static")
+# =========================================
+
 # 创建临时目录用于存储处理后的图像和视频
 UPLOAD_DIR = os.path.join(tempfile.gettempdir(), "yolo_api_uploads")
 RESULT_DIR = os.path.join(tempfile.gettempdir(), "yolo_api_results")
@@ -60,6 +90,8 @@ os.makedirs(RESULT_DIR, exist_ok=True)
 
 logger.info(f"Upload directory: {UPLOAD_DIR}")
 logger.info(f"Result directory: {RESULT_DIR}")
+
+
 
 
 @app.post("/detect")
@@ -247,6 +279,189 @@ async def health_check():
             "files": result_files
         }
     }
+
+
+# 创建视频流处理器实例
+stream_processor = None
+
+
+# 在应用初始化后初始化视频流处理器
+@app.on_event("startup")
+async def startup_event():
+    global stream_processor
+    # 确保yolo_model已加载
+    if yolo_model is not None:
+        stream_processor = VideoStreamProcessor(yolo_model, Config, logger)
+        logger.info("Video stream processor initialized successfully")
+
+        # 检查测试页面是否存在
+        test_page_path = os.path.join(static_dir, "video_stream_test.html")
+        if os.path.exists(test_page_path):
+            logger.info(f"Test page found at: {test_page_path}")
+        else:
+            logger.warning(f"Test page not found at: {test_page_path}. Please create it manually.")
+    else:
+        logger.warning("YOLOv10 model not loaded, video streaming will not work properly")
+
+
+# WebSocket连接端点
+@app.websocket("/ws/video_stream")
+async def video_stream_endpoint(websocket: WebSocket):
+    """
+    用于实时视频流分析的WebSocket端点
+
+    客户端可以发送：
+    1. 单个图像帧进行分析
+    2. 视频文件路径进行批量分析
+    3. 控制命令（开始/停止处理）
+    """
+    client_id = str(uuid.uuid4())
+    await websocket.accept()
+
+    if stream_processor is None:
+        await websocket.send_json({
+            "type": "error",
+            "message": "Video stream processor is not initialized"
+        })
+        await websocket.close()
+        return
+
+    try:
+        # 注册WebSocket连接
+        await stream_processor.register_connection(websocket, client_id)
+
+        # 处理客户端消息
+        while True:
+            # 接收客户端消息
+            data = await websocket.receive_text()
+            message = json.loads(data)
+            msg_type = message.get("type", "")
+
+            # 根据消息类型处理
+            if msg_type == "frame":
+                # 处理单个图像帧
+                frame_data = message.get("data")
+                frame_id = message.get("frame_id")
+                await stream_processor.process_frame(frame_data, client_id, frame_id)
+
+            elif msg_type == "video_path":
+                # 处理视频文件
+                video_path = message.get("path")
+                save_output = message.get("save_output", False)
+                output_path = message.get("output_path")
+
+                # 验证视频文件是否存在
+                if not os.path.exists(video_path):
+                    await websocket.send_json({
+                        "type": "error",
+                        "message": f"Video file not found: {video_path}"
+                    })
+                    continue
+
+                # 开始处理视频
+                await stream_processor.start_video_processing(
+                    video_path, client_id, save_output, output_path
+                )
+
+            elif msg_type == "stop":
+                # 停止处理
+                if client_id in stream_processor.stop_signals:
+                    stream_processor.stop_signals[client_id].set()
+                    await websocket.send_json({
+                        "type": "stopped",
+                        "message": "Processing stopped by client request"
+                    })
+
+            elif msg_type == "ping":
+                # 心跳检测
+                await websocket.send_json({
+                    "type": "pong",
+                    "timestamp": time.time()
+                })
+
+            else:
+                # 未知消息类型
+                await websocket.send_json({
+                    "type": "error",
+                    "message": f"Unknown message type: {msg_type}"
+                })
+
+    except WebSocketDisconnect:
+        logger.info(f"Client {client_id} disconnected")
+    except Exception as e:
+        logger.error(f"Error in WebSocket connection: {str(e)}")
+        import traceback
+        logger.error(traceback.format_exc())
+    finally:
+        # 清理连接
+        stream_processor.unregister_connection(client_id)
+
+
+# 添加上传视频并通过WebSocket流式处理的REST端点
+@app.post("/stream_video")
+async def stream_video(file: UploadFile = File(...)):
+    """
+    上传视频文件并返回WebSocket连接信息，用于实时流式处理
+    """
+    try:
+        # 检查模型是否加载成功
+        if yolo_model is None:
+            raise HTTPException(
+                status_code=500,
+                detail="Model is not loaded properly. Please check server logs or use the /health endpoint for diagnostics."
+            )
+
+        # 验证文件是视频
+        content_type = file.content_type
+        if not content_type.startswith("video"):
+            raise HTTPException(status_code=400, detail="Uploaded file must be a video")
+
+        # 创建唯一的文件名
+        unique_id = str(uuid.uuid4())
+
+        # 保存上传的视频
+        file_extension = os.path.splitext(file.filename)[1]
+        input_path = os.path.join(UPLOAD_DIR, f"{unique_id}{file_extension}")
+        output_path = os.path.join(RESULT_DIR, f"{unique_id}_result{file_extension}")
+
+        # 读取和保存视频数据
+        contents = await file.read()
+        with open(input_path, "wb") as f:
+            f.write(contents)
+        logger.info(f"Saved uploaded video to: {input_path}")
+
+        # 生成WebSocket连接信息
+        websocket_url = f"ws://localhost:8000/ws/video_stream"
+        client_id = str(uuid.uuid4())
+
+        # 返回连接信息和命令
+        return {
+            "status": "success",
+            "message": "Video uploaded successfully, use WebSocket for streaming",
+            "video_path": input_path,
+            "output_path": output_path,
+            "websocket": {
+                "url": websocket_url,
+                "client_id": client_id,
+                "command": {
+                    "type": "video_path",
+                    "path": input_path,
+                    "save_output": True,
+                    "output_path": output_path
+                }
+            }
+        }
+
+    except Exception as e:
+        import traceback
+        error_traceback = traceback.format_exc()
+        logger.error(f"Error in stream_video: {str(e)}\n{error_traceback}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/test_video_stream")
+async def test_video_stream():
+    """返回视频流测试页面"""
+    return FileResponse(os.path.join(static_dir, "video_stream_test.html"))
 
 
 @app.post("/update_class_names")
