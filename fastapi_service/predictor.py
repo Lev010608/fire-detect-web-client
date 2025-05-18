@@ -1,10 +1,32 @@
 # fastapi_service/predictor.py
 
+import os
+import sys
 import cv2
 import numpy as np
 from PIL import Image
-import os
 import tempfile
+
+# 获取当前脚本的绝对路径
+current_dir = os.path.dirname(os.path.abspath(__file__))
+
+# 获取项目根目录
+project_root = os.path.abspath(os.path.join(current_dir, '..'))
+
+# 将项目根目录添加到Python路径
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+    print(f"Added {project_root} to sys.path")
+
+# 现在可以导入项目根目录下的Config
+try:
+    import Config
+
+    print("Successfully imported Config in predictor.py")
+except ImportError as e:
+    print(f"Failed to import Config in predictor.py: {e}")
+    raise
+
 
 def preprocess_image(image: Image.Image):
     """将 PIL 图像转换为 NumPy 数组"""
@@ -29,6 +51,10 @@ def run_inference(model, image=None, video_path=None):
     detection_results = {}
 
     try:
+        # 检查模型是否为None
+        if model is None:
+            raise ValueError("Model is not loaded properly. Please check the model initialization.")
+
         if image is not None:
             # 处理图片
             # 如果是PIL Image，转换为NumPy数组
@@ -53,14 +79,17 @@ def run_inference(model, image=None, video_path=None):
 
                 # 将结果整合到参数列表
                 for box, cls, conf in zip(location_list, cls_list, conf_list):
+                    cls_int = int(cls)
+                    # 使用Config.names和Config.CH_names代替model.names
                     detection_params.append({
                         "bbox": [int(x) for x in box],  # x1, y1, x2, y2
-                        "class": int(cls),
-                        "class_name": model.names[int(cls)],
+                        "class": cls_int,
+                        "class_name": Config.CH_names[cls_int] if cls_int < len(
+                            Config.CH_names) else f"未知类别{cls_int}",
                         "confidence": float(conf)
                     })
 
-            # 获取标注后的图像
+            # 从results获取图像并进行手动标注
             annotated_image = results.plot()
 
             # 将结果添加到返回字典
@@ -110,10 +139,12 @@ def run_inference(model, image=None, video_path=None):
                     conf_list = boxes.conf.cpu().numpy().tolist() if hasattr(boxes.conf, 'cpu') else boxes.conf.tolist()
 
                     for box, cls, conf in zip(location_list, cls_list, conf_list):
+                        cls_int = int(cls)
                         frame_results.append({
                             "bbox": [int(x) for x in box],  # x1, y1, x2, y2
-                            "class": int(cls),
-                            "class_name": model.names[int(cls)],
+                            "class": cls_int,
+                            "class_name": Config.CH_names[cls_int] if cls_int < len(
+                                Config.CH_names) else f"未知类别{cls_int}",
                             "confidence": float(conf)
                         })
 
