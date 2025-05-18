@@ -1,8 +1,17 @@
+# fastapi_service/predictor.py
+
 import cv2
 import numpy as np
 from PIL import Image
 import os
 import tempfile
+
+def preprocess_image(image: Image.Image):
+    """将 PIL 图像转换为 NumPy 数组"""
+    img = np.array(image)
+    # 转换为BGR（YOLO通常处理BGR格式的图像）
+    img = img[..., ::-1]
+    return img
 
 
 def run_inference(model, image=None, video_path=None):

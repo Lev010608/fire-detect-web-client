@@ -16,40 +16,40 @@ QPushButton:pressed{background-color:rgb(180,180,180);border: None;}
 #MainWindow{border-image:url(a.jpg)}
 /* style.css */
 
-/* ±êÌâÑùÊ½ */
+/* ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ê½ */
 #MainWindow {
     background-color: #ea2020;
 }
 
-/* ¼ì²â½á¹ûÓëÎ»ÖÃĞÅÏ¢¿òÑùÊ½ */
+/* ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Î»ï¿½ï¿½ï¿½ï¿½Ï¢ï¿½ï¿½ï¿½ï¿½Ê½ */
 #groupBox_3 {
     background-color: #da1111;
     border: 1px solid #ed0000;
     border-radius: 5px;
 }
 
-/* ÎÄ¼şµ¼Èë¿òÑùÊ½ */
+/* ï¿½Ä¼ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ê½ */
 #groupBox {
     background-color: #ff0e0e;
     border: 1px solid #e61c1c;
     border-radius: 5px;
 }
 
-/* ÎÄ¼şÊäÈë¿òÑùÊ½ */
+/* ï¿½Ä¼ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ê½ */
 #PiclineEdit, #VideolineEdit, #CaplineEdit {
     border: 1px solid #8d2121;
     border-radius: 5px;
     padding: 5px;
 }
 
-/* ¼ì²â½á¹û¿òÑùÊ½ */
+/* ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ê½ */
 #groupBox_2 {
     background-color: #db0606;
     border: 1px solid #d12828;
     border-radius: 5px;
 }
 
-/* ²Ù×÷°´Å¥ÑùÊ½ */
+/* ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Å¥ï¿½ï¿½Ê½ */
 #SaveBtn, #ExitBtn {
     background-color: #007bff;
     color: #ffffff;
@@ -59,53 +59,53 @@ QPushButton:pressed{background-color:rgb(180,180,180);border: None;}
     margin-right: 10px;
 }
 
-/* ²Ù×÷°´Å¥ĞüÍ£ÑùÊ½ */
+/* ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Å¥ï¿½ï¿½Í£ï¿½ï¿½Ê½ */
 #SaveBtn:hover, #ExitBtn:hover {
     background-color: #0056b3;
 }
 
-/* Ö÷´°¿Ú±êÌâÑùÊ½ */
+/* ï¿½ï¿½ï¿½ï¿½ï¿½Ú±ï¿½ï¿½ï¿½ï¿½ï¿½Ê½ */
 #label_3 {
     font-size: 24px;
     font-weight: bold;
     color: #61d65c;
 }
 
-/* ¼ì²â½á¹û±êÇ©ÑùÊ½ */
+/* ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ç©ï¿½ï¿½Ê½ */
 #label_4 {
     font-weight: bold;
 }
 
-/* ¼ì²â½á¹ûÊıÖµÑùÊ½ */
+/* ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Öµï¿½ï¿½Ê½ */
 #label_14, #label_17, #label_18, #label_19, #label_15 {
     font-weight: bold;
     color: #007bff;
 }
 
-/* ÆäËû±êÇ©ÑùÊ½ */
+/* ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ç©ï¿½ï¿½Ê½ */
 #label_6, #label_8, #label_7, #label_9, #label_10, #label_11, #label_13 {
     font-weight: bold;
 }
 
-/* ±í¸ñÑùÊ½ */
+/* ï¿½ï¿½ï¿½ï¿½ï¿½Ê½ */
 #tableWidget {
     border: 1px solid #ccc;
     border-radius: 5px;
 }
 
-/* ±íÍ·ÑùÊ½ */
+/* ï¿½ï¿½Í·ï¿½ï¿½Ê½ */
 #tableWidget QHeaderView::section {
     background-color: #007bff;
     color: #ffffff;
     padding: 4px;
 }
 
-/* ±í¸ñÄÚÈİÑùÊ½ */
+/* ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ê½ */
 #tableWidget QTableView {
     alternate-background-color: #fd1111;
 }
 
-/* ¼ì²â½á¹û±êÇ©ÑùÊ½ */
+/* ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ç©ï¿½ï¿½Ê½ */
 #label_show {
     border: 1px solid #ccc;
     border-radius: 5px;
@@ -114,71 +114,82 @@ QPushButton:pressed{background-color:rgb(180,180,180);border: None;}
 }
 /* style.css */
 
-/* Ö÷´°¿ÚÑùÊ½ */
+/* ä¸»çª—å£èƒŒæ™¯ */
 #MainWindow {
-    background-color: #f0f0f0;
+    background-color: #f7f7f7;
 }
 
-/* ¼ì²â½á¹ûÓëÎ»ÖÃĞÅÏ¢¿òÑùÊ½ */
-#groupBox_3 {
-    background-color: #ffffff;
-    border: 1px solid #ccc;
-    border-radius: 5px;
-}
-
-/* ÎÄ¼şµ¼Èë¿òÑùÊ½ */
+/* æ–‡ä»¶å¯¼å…¥æ¡† */
 #groupBox {
     background-color: #ffffff;
     border: 1px solid #ccc;
-    border-radius: 5px;
+    border-radius: 10px;
+    padding: 10px;
 }
 
-/* ÎÄ¼şÊäÈë¿òÑùÊ½ */
+/* æ–‡ä»¶é€‰æ‹©æ¡†æ ·å¼ */
 #PiclineEdit, #VideolineEdit, #CaplineEdit {
     border: 1px solid #ccc;
-    border-radius: 5px;
+    border-radius: 8px;
+    padding: 5px;
+    font-size: 16px;
+}
+
+/* æŒ‰é’®æ ·å¼ */
+#SaveBtn, #ExitBtn {
+    background-color: #007bff;
+    color: #fff;
+    border-radius: 8px;
+    padding: 10px;
+    font-size: 16px;
+    border: none;
+}
+
+#SaveBtn:hover, #ExitBtn:hover {
+    background-color: #0056b3;
+}
+
+/* è¿›åº¦æ¡æ ·å¼ */
+QProgressBar {
+    background-color: #f1f1f1;
+    border-radius: 10px;
+    height: 20px;
+}
+
+QProgressBar::chunk {
+    background-color: #007bff;
+    border-radius: 10px;
+}
+
+/* è¡¨æ ¼æ ·å¼ */
+#tableWidget {
+    border: 1px solid #ddd;
+    border-radius: 10px;
+    background-color: #fff;
+}
+
+/* è¡¨å¤´ */
+#tableWidget QHeaderView::section {
+    background-color: #007bff;
+    color: white;
     padding: 5px;
 }
 
-/* ¼ì²â½á¹û¿òÑùÊ½ */
-#groupBox_2 {
-    background-color: #ffffff;
-    border: 1px solid #ccc;
-    border-radius: 5px;
+/* æ ‡ç­¾æ ·å¼ */
+#label_4, #label_6, #label_7, #label_8, #label_9, #label_10, #label_11 {
+    font-size: 16px;
+    font-weight: bold;
+    color: #333;
 }
 
-/* ±í¸ñÑùÊ½ */
-#tableWidget {
-    border: 1px solid #ccc;
-    border-radius: 5px;
-}
-
-/* ±íÍ·ÑùÊ½ */
-#tableWidget QHeaderView::section {
-    background-color: #007bff;
-    color: #ffffff;
-    padding: 4px;
-}
-
-/* ±í¸ñÄÚÈİÑùÊ½ */
-#tableWidget QTableView {
-    alternate-background-color: #f0f0f0;
-}
-
-/* ¼ì²â½á¹û±êÇ©ÑùÊ½ */
+/* æ˜¾ç¤ºå›¾åƒæ¡† */
 #label_show {
-    border: 1px solid #ccc;
-    border-radius: 5px;
+    border-radius: 10px;
     background-image: url(:/icons/ui_imgs/11.png);
     background-size: cover;
 }
 
-/* ÆäËû±êÇ©ÑùÊ½ */
-#label_4, #label_6, #label_7, #label_8, #label_9, #label, #label_nums {
-    font-weight: bold;
-}
-
-/* ÎÄ¼şµ¼Èë°´Å¥ÑùÊ½ */
+/* ï¿½Ä¼ï¿½ï¿½ï¿½ï¿½ë°´Å¥ï¿½ï¿½Ê½ */
 #CapBtn, #PicBtn, #VideoBtn, #FilesBtn {
     border: none;
     background-size: contain;
@@ -187,58 +198,58 @@ QPushButton:pressed{background-color:rgb(180,180,180);border: None;}
 }
 /* style.css */
 
-/* Ö÷´°¿ÚÑùÊ½ */
+/* ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ê½ */
 #MainWindow {
     background-color: #f0f0f0;
 }
 
-/* ¼ì²â½á¹ûÓëÎ»ÖÃĞÅÏ¢¿òÑùÊ½ */
+/* ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Î»ï¿½ï¿½ï¿½ï¿½Ï¢ï¿½ï¿½ï¿½ï¿½Ê½ */
 #groupBox_3 {
     background-color: #ffffff;
     border: 1px solid #ccc;
     border-radius: 5px;
 }
 
-/* ÎÄ¼şµ¼Èë¿òÑùÊ½ */
+/* ï¿½Ä¼ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ê½ */
 #groupBox {
     background-color: #ffffff;
     border: 1px solid #ccc;
     border-radius: 5px;
 }
 
-/* ÎÄ¼şÊäÈë¿òÑùÊ½ */
+/* ï¿½Ä¼ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ê½ */
 #PiclineEdit, #VideolineEdit, #CaplineEdit {
     border: 1px solid #ccc;
     border-radius: 5px;
     padding: 5px;
 }
 
-/* ¼ì²â½á¹û¿òÑùÊ½ */
+/* ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ê½ */
 #groupBox_2 {
     background-color: #ffffff;
     border: 1px solid #ccc;
     border-radius: 5px;
 }
 
-/* ±í¸ñÑùÊ½ */
+/* ï¿½ï¿½ï¿½ï¿½ï¿½Ê½ */
 #tableWidget {
     border: 1px solid #ccc;
     border-radius: 5px;
 }
 
-/* ±íÍ·ÑùÊ½ */
+/* ï¿½ï¿½Í·ï¿½ï¿½Ê½ */
 #tableWidget QHeaderView::section {
     background-color: #007bff;
     color: #ffffff;
     padding: 4px;
 }
 
-/* ±í¸ñÄÚÈİÑùÊ½ */
+/* ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ê½ */
 #tableWidget QTableView {
     alternate-background-color: #f0f0f0;
 }
 
-/* ¼ì²â½á¹û±êÇ©ÑùÊ½ */
+/* ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ç©ï¿½ï¿½Ê½ */
 #label_show {
     border: 1px solid #ccc;
     border-radius: 5px;
@@ -246,12 +257,12 @@ QPushButton:pressed{background-color:rgb(180,180,180);border: None;}
     background-size: cover;
 }
 
-/* ÆäËû±êÇ©ÑùÊ½ */
+/* ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ç©ï¿½ï¿½Ê½ */
 #label_4, #label_6, #label_7, #label_8, #label_9, #label, #label_nums {
     font-weight: bold;
 }
 
-/* ÎÄ¼şµ¼Èë°´Å¥ÑùÊ½ */
+/* ï¿½Ä¼ï¿½ï¿½ï¿½ï¿½ë°´Å¥ï¿½ï¿½Ê½ */
 #CapBtn, #PicBtn, #VideoBtn, #FilesBtn {
     border: none;
     background-size: contain;

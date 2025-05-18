@@ -7,6 +7,6 @@ save_path = 'D:'
 model_path = 'runs/detect/exp4/weights/best.pt'
 
 
-names = {0: 'helmet',1:'nohelmet'}
+names = {0: 'fire',1:'smoke'}
 
 CH_names = ['火焰','烟雾']
