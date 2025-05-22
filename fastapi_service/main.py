@@ -13,6 +13,9 @@ import sys
 import logging
 import time
 
+import glob
+from fastapi import Query, Form
+
 # 添加WebSocket支持
 from fastapi import WebSocket, WebSocketDisconnect
 from typing import Dict, Optional
@@ -279,6 +282,154 @@ async def health_check():
             "files": result_files
         }
     }
+
+
+@app.post("/detect_batch")
+async def detect_fire_smoke_batch(folder_path: str = Form(None)):
+    """批量处理文件夹中的所有图片，检测火焰和烟雾"""
+    return await _process_folder(folder_path)
+
+
+@app.get("/detect_batch")
+async def detect_fire_smoke_batch_get(folder_path: str = Query(...)):
+    """通过GET方法批量处理文件夹中的所有图片，检测火焰和烟雾"""
+    return await _process_folder(folder_path)
+
+
+async def _process_folder(folder_path: str):
+    """处理文件夹中的所有图片（共享函数）"""
+    try:
+        # 检查模型是否加载成功
+        if yolo_model is None:
+            raise HTTPException(
+                status_code=500,
+                detail="Model is not loaded properly. Please check server logs or use the /health endpoint for diagnostics."
+            )
+
+        # 检查文件夹是否存在
+        if not os.path.exists(folder_path) or not os.path.isdir(folder_path):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Folder path {folder_path} does not exist or is not a directory"
+            )
+
+        # 获取文件夹中的所有图像文件
+        image_extensions = ['.jpg', '.jpeg', '.png', '.bmp', '.tif', '.tiff', '.webp']
+        image_files = []
+
+        for ext in image_extensions:
+            image_files.extend(glob.glob(os.path.join(folder_path, f"*{ext}")))
+            image_files.extend(glob.glob(os.path.join(folder_path, f"*{ext.upper()}")))
+
+        if not image_files:
+            raise HTTPException(
+                status_code=400,
+                detail=f"No image files found in folder {folder_path}"
+            )
+
+        logger.info(f"Found {len(image_files)} images in folder {folder_path}")
+
+        # 创建结果目录
+        batch_id = str(uuid.uuid4())
+        batch_result_dir = os.path.join(RESULT_DIR, f"batch_{batch_id}")
+        os.makedirs(batch_result_dir, exist_ok=True)
+
+        # 处理每个图像
+        results = []
+        total_detections = 0
+        processed_count = 0
+
+        for img_path in image_files:
+            try:
+                # 创建唯一的文件名
+                file_name = os.path.basename(img_path)
+                unique_id = str(uuid.uuid4())
+
+                # 使用与GUI相同的方式读取图片
+                img = cv2.imread(img_path)
+                if img is None:
+                    logger.warning(f"Failed to read image: {img_path}")
+                    continue
+
+                logger.info(f"Processing image: {img_path}, shape: {img.shape}")
+
+                # 运行YOLOv10推理
+                start_time = time.time()
+                result = yolo_model(img)[0]  # 直接使用OpenCV读取的图像进行推理
+                end_time = time.time()
+                inference_time = (end_time - start_time) * 1000  # 毫秒
+                logger.info(f"Inference took {inference_time:.2f} ms")
+
+                # 获取检测框信息
+                boxes = result.boxes
+                logger.info(f"Found {len(boxes)} boxes")
+
+                # 构建结果字典
+                detection_params = []
+                if len(boxes) > 0:
+                    # 获取位置、类别和置信度信息
+                    location_list = boxes.xyxy.cpu().numpy().tolist() if hasattr(boxes.xyxy,
+                                                                                 'cpu') else boxes.xyxy.tolist()
+                    cls_list = boxes.cls.cpu().numpy().tolist() if hasattr(boxes.cls, 'cpu') else boxes.cls.tolist()
+                    conf_list = boxes.conf.cpu().numpy().tolist() if hasattr(boxes.conf, 'cpu') else boxes.conf.tolist()
+
+                    # 将结果整合到参数列表
+                    for box, cls, conf in zip(location_list, cls_list, conf_list):
+                        cls_int = int(cls)
+                        class_name = Config.CH_names[cls_int] if cls_int < len(
+                            Config.CH_names) else f"未知类别{cls_int}"
+                        logger.info(f"Detected: {class_name} (class {cls_int}) with confidence {conf:.4f} at {box}")
+                        detection_params.append({
+                            "bbox": [int(x) for x in box],  # x1, y1, x2, y2
+                            "class": cls_int,
+                            "class_name": class_name,
+                            "confidence": float(conf)
+                        })
+
+                total_detections += len(detection_params)
+                processed_count += 1
+
+                # 获取标注后的图像
+                annotated_image = result.plot()
+
+                # 保存标注后的图片
+                file_extension = os.path.splitext(file_name)[1]
+                output_path = os.path.join(batch_result_dir,
+                                           f"{os.path.splitext(file_name)[0]}_annotated{file_extension}")
+                cv2.imwrite(output_path, annotated_image)  # 使用OpenCV保存
+                logger.info(f"Saved annotated image to: {output_path}")
+
+                # 添加到结果列表
+                results.append({
+                    "original_path": img_path,
+                    "annotated_path": output_path,
+                    "detections": detection_params,
+                    "detection_count": len(detection_params),
+                    "inference_time": f"{inference_time:.2f} ms"
+                })
+
+            except Exception as e:
+                logger.error(f"Error processing image {img_path}: {str(e)}")
+                # 继续处理下一张图片
+                continue
+
+        return {
+            "status": "success",
+            "message": f"Processed {processed_count} out of {len(image_files)} images with {total_detections} total detections",
+            "batch_id": batch_id,
+            "result_directory": batch_result_dir,
+            "results": results,
+            "total_images": len(image_files),
+            "processed_images": processed_count,
+            "total_detections": total_detections,
+            "class_names": Config.CH_names
+        }
+
+    except Exception as e:
+        import traceback
+        error_traceback = traceback.format_exc()
+        logger.error(f"Error in detect_fire_smoke_batch: {str(e)}\n{error_traceback}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # 创建视频流处理器实例
