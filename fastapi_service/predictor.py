@@ -1,5 +1,7 @@
 # fastapi_service/predictor.py
 
+import subprocess
+import tempfile
 import os
 import sys
 import cv2
@@ -157,6 +159,29 @@ def run_inference(model, image=None, video_path=None):
             # 释放资源
             cap.release()
             out.release()
+
+            try:
+                fixed_output_path = output_path.replace('.mp4', '_fixed.mp4')
+
+                # 使用ffmpeg将moov atom移到文件开头
+                subprocess.run([
+                    'ffmpeg', '-i', output_path,
+                    '-c', 'copy',  # 不重新编码，只修复结构
+                    '-movflags', 'faststart',  # 将moov atom移到开头
+                    '-f', 'mp4',
+                    fixed_output_path
+                ], check=True, capture_output=True)
+
+                # 删除原文件，使用修复后的文件
+                os.remove(output_path)
+                output_path = fixed_output_path
+
+                print(f"视频结构已优化: {output_path}")
+
+            except subprocess.CalledProcessError as e:
+                print(f"ffmpeg优化失败，使用原文件: {e}")
+            except FileNotFoundError:
+                print("ffmpeg未找到，使用原文件")
 
             detection_results['annotated_video'] = output_path
             detection_results['params'] = all_frame_results  # 返回每帧的检测结果
