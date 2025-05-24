@@ -1,3 +1,4 @@
+// springboot/src/main/java/com/example/common/config/WebConfig.java
 package com.example.common.config;
 
 import org.springframework.context.annotation.Configuration;
@@ -7,7 +8,7 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 import javax.annotation.Resource;
 
 @Configuration
-public class WebConfig implements  WebMvcConfigurer {
+public class WebConfig implements WebMvcConfigurer {
 
     @Resource
     private JwtInterceptor jwtInterceptor;
@@ -19,6 +20,13 @@ public class WebConfig implements  WebMvcConfigurer {
                 .excludePathPatterns("/")
                 .excludePathPatterns("/login")
                 .excludePathPatterns("/register")
-                .excludePathPatterns("/files/**");
+                .excludePathPatterns("/files/**")
+                .excludePathPatterns("/visuals/health")
+                .excludePathPatterns("/visuals/model/details")
+                .excludePathPatterns("/visuals/result/**")        // 结果文件访问
+                .excludePathPatterns("/visuals/debug/**")
+                .excludePathPatterns("/visuals/test/**")
+                .excludePathPatterns("/visuals/download/**")
+                .excludePathPatterns("/error");
     }
 }

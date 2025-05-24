@@ -1,3 +1,4 @@
+// springboot/src/main/java/com/example/utils/TokenUtils.java
 package com.example.utils;
 
 import cn.hutool.core.date.DateUtil;
@@ -40,6 +41,8 @@ public class TokenUtils {
     public void setAdminService() {
         staticAdminService = adminService;
     }
+
+    @PostConstruct
     public void setUserService() {
         staticUserService = userService;
     }
@@ -77,4 +80,3 @@ public class TokenUtils {
         return new Account();  // 返回空的账号对象
     }
 }
-

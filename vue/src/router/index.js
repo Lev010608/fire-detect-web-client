@@ -29,9 +29,11 @@ const routes = [
     path: '/front',
     name: 'Front',
     component: () => import('../views/Front.vue'),
+    redirect: '/front/home', // 重定向到前端首页
     children: [
-      { path: 'home', name: 'Home', meta: { name: '系统首页' }, component: () => import('../views/front/Home') },
-      { path: 'person', name: 'Person', meta: { name: '个人信息' }, component: () => import('../views/front/Person') },
+      { path: 'home', name: 'FrontHome', meta: { name: '系统首页' }, component: () => import('../views/front/Home') },
+      { path: 'detection', name: 'Detection', meta: { name: '火焰检测' }, component: () => import('../views/front/Detection') },
+      { path: 'person', name: 'FrontPerson', meta: { name: '个人信息' }, component: () => import('../views/front/Person') },
     ]
   },
   { path: '/login', name: 'Login', meta: { name: '登录' }, component: () => import('../views/Login.vue') },

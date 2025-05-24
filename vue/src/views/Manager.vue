@@ -52,6 +52,13 @@
             <el-menu-item index="/admin">管理员信息</el-menu-item>
             <el-menu-item index="/user">用户信息</el-menu-item>
           </el-submenu>
+          <el-submenu index="content">
+            <template slot="title">
+              <i class="el-icon-menu"></i><span>资产管理</span>
+            </template>
+            <el-menu-item index="/admin">视频信息管理</el-menu-item>
+            <el-menu-item index="/user">图片信息管理</el-menu-item>
+          </el-submenu>
         </el-menu>
       </div>
 
