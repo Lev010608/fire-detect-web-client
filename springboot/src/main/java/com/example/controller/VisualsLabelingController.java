@@ -21,10 +21,10 @@ import javax.servlet.http.HttpServletRequest;
 import java.io.File;
 import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.LinkedHashMap;
+
 
 
 /**
@@ -162,22 +162,186 @@ public class VisualsLabelingController {
                 return Result.error("400", "文件夹路径不能为空");
             }
 
+            logger.info("=== 开始批量检测 ===");
+            logger.info("文件夹路径: " + folderPath);
+
             // 1. 调用FastAPI进行批量检测
-            Map<String, Object> result = HttpClientUtil.detectBatch(folderPath.trim());
+            Map<String, Object> fastApiResult = HttpClientUtil.detectBatch(folderPath.trim());
+            logger.info("FastAPI原始返回结果: " + fastApiResult);
 
-            // 2. 保存批量检测结果到数据库
+            // 2. 解析FastAPI返回的结果
             @SuppressWarnings("unchecked")
-            List<Map<String, Object>> batchResults = (List<Map<String, Object>>) result.get("results");
+            List<Map<String, Object>> rawResults = (List<Map<String, Object>>) fastApiResult.get("results");
 
-            if (batchResults != null && !batchResults.isEmpty()) {
-                String batchId = labeledVisualsService.saveBatchProcessing(batchResults, folderPath);
-                result.put("batch_id", batchId);
+            if (rawResults == null || rawResults.isEmpty()) {
+                logger.warn("FastAPI返回的results为空");
+                return Result.error("500", "未获取到有效的检测结果");
             }
 
-            return Result.success(result);
+            logger.info("FastAPI原始结果数量: " + rawResults.size());
+
+            // 🔥 关键：去重处理，使用原始路径作为唯一标识
+            Map<String, Map<String, Object>> uniqueResults = new LinkedHashMap<>();
+
+            for (Map<String, Object> result : rawResults) {
+                String originalPath = (String) result.get("original_path");
+                if (originalPath != null && !uniqueResults.containsKey(originalPath)) {
+                    uniqueResults.put(originalPath, result);
+                    logger.info("添加唯一结果: " + originalPath);
+                } else {
+                    logger.warn("发现重复结果，跳过: " + originalPath);
+                }
+            }
+
+            logger.info("去重后结果数量: " + uniqueResults.size());
+
+            // 3. 处理去重后的结果
+            List<Map<String, Object>> processedResults = new ArrayList<>();
+            String batchId = UUID.randomUUID().toString();
+
+            for (Map<String, Object> result : uniqueResults.values()) {
+                // 提取文件名
+                String originalPath = (String) result.get("original_path");
+                String fileName = originalPath != null ?
+                        originalPath.substring(originalPath.lastIndexOf(File.separator) + 1) : "unknown";
+
+                // 提取标注图片路径并转换为可访问的URL
+                String annotatedPath = (String) result.get("annotated_path");
+                String annotatedFileName = annotatedPath != null ?
+                        annotatedPath.substring(annotatedPath.lastIndexOf(File.separator) + 1) : null;
+
+                // 构建可访问的URL
+                String annotatedUrl = annotatedFileName != null ?
+                        "/visuals/batch/" + annotatedFileName : null;
+
+                Map<String, Object> processedResult = new HashMap<>();
+                processedResult.put("filename", fileName);
+                processedResult.put("original_path", originalPath);
+                processedResult.put("annotated_path", annotatedPath);
+                processedResult.put("annotated_url", annotatedUrl);
+                processedResult.put("detections", result.get("detections"));
+                processedResult.put("detection_count", result.get("detection_count"));
+                processedResult.put("inference_time", result.get("inference_time"));
+
+                processedResults.add(processedResult);
+                logger.info("处理结果: " + fileName + ", 检测数量: " + result.get("detection_count"));
+            }
+
+            // 4. 保存批量检测结果到数据库
+            String savedBatchId = labeledVisualsService.saveBatchProcessing(processedResults, folderPath, batchId);
+
+            // 5. 计算总检测数量
+            int totalDetections = 0;
+            for (Map<String, Object> result : processedResults) {
+                Integer count = (Integer) result.get("detection_count");
+                if (count != null) {
+                    totalDetections += count;
+                }
+            }
+
+            // 6. 构建返回结果
+            Map<String, Object> response = new HashMap<>();
+            response.put("status", "success");
+            response.put("message", "批量检测完成");
+            response.put("batch_id", savedBatchId);
+            response.put("results", processedResults);
+            response.put("total_images", processedResults.size());
+            response.put("processed_images", processedResults.size());
+            response.put("total_detections", totalDetections);  // 🔥 使用计算后的总数
+            response.put("class_names", fastApiResult.get("class_names"));
+            response.put("file_type", "batch_images");
+
+            logger.info("=== 批量检测完成 ===");
+            logger.info("实际处理图片数: " + processedResults.size());
+            logger.info("总检测目标数: " + totalDetections);
+
+            return Result.success(response);
 
         } catch (Exception e) {
+            logger.error("批量检测失败", e);
             return Result.error("500", "批量检测失败：" + e.getMessage());
+        }
+    }
+
+    /**
+     * 获取批量检测结果文件
+     */
+    @GetMapping("/batch/{filename}")
+    public ResponseEntity<byte[]> getBatchResultFile(@PathVariable String filename) {
+        try {
+            logger.info("=== 获取批量检测结果文件 ===");
+            logger.info("请求文件名: " + filename);
+
+            // 从FastAPI获取文件数据
+            byte[] fileData = HttpClientUtil.getResultFile(filename);
+
+            if (fileData == null || fileData.length == 0) {
+                logger.error("从FastAPI获取的批量结果文件数据为空: " + filename);
+                return new ResponseEntity<>(HttpStatus.NOT_FOUND);
+            }
+
+            logger.info("成功获取文件数据，大小: " + fileData.length + " bytes");
+
+            // 根据文件扩展名设置Content-Type
+            String contentType = "image/jpeg";
+            if (filename.toLowerCase().endsWith(".png")) {
+                contentType = "image/png";
+            } else if (filename.toLowerCase().endsWith(".bmp")) {
+                contentType = "image/bmp";
+            } else if (filename.toLowerCase().endsWith(".gif")) {
+                contentType = "image/gif";
+            }
+
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.parseMediaType(contentType));
+            headers.setContentLength(fileData.length);
+
+            // 🔥 设置CORS头部
+            headers.add("Access-Control-Allow-Origin", "*");
+            headers.add("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+            headers.add("Access-Control-Allow-Headers", "*");
+            headers.add("Access-Control-Expose-Headers", "Content-Type, Content-Length, Content-Disposition");
+
+            // 🔥 设置缓存策略
+            headers.setCacheControl("public, max-age=3600"); // 缓存1小时
+
+            // 🔥 设置为inline显示
+            headers.add("Content-Disposition", "inline; filename=\"" + filename + "\"");
+
+            logger.info("返回批量结果文件，Content-Type: " + contentType + ", Size: " + fileData.length);
+            return new ResponseEntity<>(fileData, headers, HttpStatus.OK);
+
+        } catch (Exception e) {
+            logger.error("获取批量结果文件失败: " + filename, e);
+            return new ResponseEntity<>(HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    /**
+     * 测试批量文件访问
+     */
+    @GetMapping("/test/batch/{filename}")
+    public ResponseEntity<String> testBatchFileAccess(@PathVariable String filename) {
+        try {
+            String fileUrl = "http://localhost:9090/visuals/batch/" + filename;
+
+            // 尝试获取文件检查是否存在
+            byte[] fileData = HttpClientUtil.getResultFile(filename);
+            boolean exists = fileData != null && fileData.length > 0;
+
+            return ResponseEntity.ok(String.format(
+                    "批量文件测试结果:\\n" +
+                            "- 文件名: %s\\n" +
+                            "- 访问URL: %s\\n" +
+                            "- 文件存在: %s\\n" +
+                            "- 文件大小: %d bytes",
+                    filename,
+                    fileUrl,
+                    exists ? "是" : "否",
+                    exists ? fileData.length : 0
+            ));
+        } catch (Exception e) {
+            return ResponseEntity.ok("错误: " + e.getMessage());
         }
     }
 
@@ -445,6 +609,53 @@ public class VisualsLabelingController {
     public Result deleteRecordsBatch(@RequestBody List<Long> ids) {
         labeledVisualsService.deleteBatch(ids);
         return Result.success();
+    }
+
+    /**
+     * 调试批量检测 - 查看FastAPI原始返回数据
+     */
+    @PostMapping("/debug/batch")
+    public Result debugBatchDetection(@RequestBody Map<String, String> requestBody) {
+        try {
+            String folderPath = requestBody.get("folderPath");
+            if (folderPath == null || folderPath.trim().isEmpty()) {
+                return Result.error("400", "文件夹路径不能为空");
+            }
+
+            logger.info("=== 调试批量检测 ===");
+            logger.info("文件夹路径: " + folderPath);
+
+            // 调用FastAPI进行批量检测
+            Map<String, Object> fastApiResult = HttpClientUtil.detectBatch(folderPath.trim());
+
+            // 返回原始数据供调试
+            Map<String, Object> debugInfo = new HashMap<>();
+            debugInfo.put("raw_fastapi_result", fastApiResult);
+
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> results = (List<Map<String, Object>>) fastApiResult.get("results");
+
+            if (results != null) {
+                debugInfo.put("results_count", results.size());
+
+                // 分析重复情况
+                Map<String, Integer> fileCount = new HashMap<>();
+                for (Map<String, Object> result : results) {
+                    String originalPath = (String) result.get("original_path");
+                    if (originalPath != null) {
+                        String fileName = originalPath.substring(originalPath.lastIndexOf(File.separator) + 1);
+                        fileCount.put(fileName, fileCount.getOrDefault(fileName, 0) + 1);
+                    }
+                }
+                debugInfo.put("file_count_analysis", fileCount);
+            }
+
+            return Result.success(debugInfo);
+
+        } catch (Exception e) {
+            logger.error("调试批量检测失败", e);
+            return Result.error("500", "调试失败：" + e.getMessage());
+        }
     }
 
     @GetMapping("/debug/result/{filename}")

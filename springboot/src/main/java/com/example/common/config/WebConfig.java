@@ -24,6 +24,7 @@ public class WebConfig implements WebMvcConfigurer {
                 .excludePathPatterns("/visuals/health")
                 .excludePathPatterns("/visuals/model/details")
                 .excludePathPatterns("/visuals/result/**")        // 结果文件访问
+                .excludePathPatterns("/visuals/batch/**")         // 批量结果文件访问
                 .excludePathPatterns("/visuals/debug/**")
                 .excludePathPatterns("/visuals/test/**")
                 .excludePathPatterns("/visuals/download/**")

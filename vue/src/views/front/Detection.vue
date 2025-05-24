@@ -35,8 +35,8 @@
         </el-button>
       </el-upload>
 
-      <el-button class="file-btn" type="primary" size="large" @click="showBatchDialog">
-        批量图片检测
+      <el-button class="file-btn" type="primary" size="large" @click="showBatchDialog" :loading="batchLoading">
+        {{ batchLoading ? '处理中...' : '批量图片检测' }}
       </el-button>
     </div>
 
@@ -44,11 +44,13 @@
     <div class="detection-result" v-if="detectionResult.show">
       <div class="result-header">
         <h3>检测结果</h3>
-        <el-tag v-if="detectionResult.fileType" :type="detectionResult.fileType === 'image' ? 'success' : 'warning'">
-          {{ detectionResult.fileType === 'image' ? '图片检测' : '视频检测' }}
+        <el-tag v-if="detectionResult.fileType"
+                :type="getFileTypeTagType(detectionResult.fileType)">
+          {{ getFileTypeLabel(detectionResult.fileType) }}
         </el-tag>
       </div>
 
+      <!-- 统计信息 -->
       <div class="result-details">
         <el-row class="result-row" :gutter="20">
           <el-col :span="6">
@@ -75,19 +77,78 @@
               </div>
             </el-card>
           </el-col>
+          <el-col :span="6" v-if="detectionResult.fileType === 'batch_images'">
+            <el-card shadow="never">
+              <div class="stat-item">
+                <div class="stat-label">处理图片数</div>
+                <div class="stat-value">{{ detectionResult.processedImages || 0 }}</div>
+              </div>
+            </el-card>
+          </el-col>
           <el-col :span="6">
             <el-card shadow="never">
               <div class="stat-item">
-                <div class="stat-label">记录ID</div>
-                <div class="stat-value">{{ detectionResult.recordId || '-' }}</div>
+                <div class="stat-label">批次ID</div>
+                <div class="stat-value">{{ detectionResult.batchId || detectionResult.recordId || '-' }}</div>
               </div>
             </el-card>
           </el-col>
         </el-row>
       </div>
 
-      <!-- 检测结果详情表格 -->
-      <div class="target-details" v-if="detectionResult.processedResults && detectionResult.processedResults.length > 0">
+      <!-- 批量检测结果展示 -->
+      <div class="batch-results" v-if="detectionResult.fileType === 'batch_images' && detectionResult.batchResults">
+        <h4>批量检测详情</h4>
+
+        <el-alert
+            :title="`成功处理 ${detectionResult.processedImages} 张图片，共检测到 ${detectionResult.detectionCount} 个目标`"
+            type="success"
+            :closable="false"
+            style="margin-bottom: 20px">
+        </el-alert>
+
+        <!-- 批量结果表格 -->
+        <el-table :data="currentPageBatchResults" style="width: 100%" border max-height="400">
+          <el-table-column label="序号" type="index" width="60" align="center" />
+          <el-table-column label="文件名" prop="filename" width="200" show-overflow-tooltip />
+          <el-table-column label="检测数量" prop="detection_count" width="100" align="center" />
+          <el-table-column label="推理时间" prop="inference_time" width="120" align="center" />
+          <el-table-column label="检测结果" prop="detections" width="200">
+            <template slot-scope="scope">
+              <el-tag
+                  v-for="(detection, index) in (scope.row.detections || []).slice(0, 3)"
+                  :key="index"
+                  :type="detection.class_name === '火焰' ? 'danger' : 'warning'"
+                  size="mini"
+                  style="margin-right: 5px;">
+                {{ detection.class_name }}({{ Math.round(detection.confidence * 100) }}%)
+              </el-tag>
+              <span v-if="(scope.row.detections || []).length > 3">...</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="操作" width="100" align="center">
+            <template slot-scope="scope">
+              <el-button size="mini" type="primary" @click="viewBatchImage(scope.row)">查看</el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+
+        <!-- 批量结果分页 -->
+        <el-pagination
+            v-if="detectionResult.batchResults && detectionResult.batchResults.length > batchPageSize"
+            @size-change="handleBatchSizeChange"
+            @current-change="handleBatchCurrentChange"
+            :current-page="currentBatchPage"
+            :page-sizes="[5, 10, 20, 50]"
+            :page-size="batchPageSize"
+            layout="total, sizes, prev, pager, next, jumper"
+            :total="detectionResult.batchResults.length"
+            style="margin-top: 20px; text-align: center">
+        </el-pagination>
+      </div>
+
+      <!-- 单张图片/视频检测结果详情表格 -->
+      <div class="target-details" v-if="detectionResult.processedResults && detectionResult.processedResults.length > 0 && detectionResult.fileType !== 'batch_images'">
         <h4>检测详情</h4>
 
         <!-- 视频检测结果按帧显示 -->
@@ -211,8 +272,8 @@
               您的浏览器不支持视频播放
             </video>
             <div v-else class="video-placeholder">
-            <i class="el-icon-loading"></i>
-            <p>视频处理中...</p>
+              <i class="el-icon-loading"></i>
+              <p>视频处理中...</p>
             </div>
           </div>
         </div>
@@ -234,38 +295,53 @@
       </span>
     </el-dialog>
 
-    <!-- 批量检测结果对话框 -->
-    <el-dialog title="批量检测结果" :visible.sync="batchResultVisible" width="80%">
-      <div v-if="batchResults.length > 0">
-        <el-alert
-            :title="`成功处理 ${batchResults.length} 张图片，共检测到 ${batchTotalDetections} 个目标`"
-            type="success"
-            :closable="false"
-            style="margin-bottom: 20px">
-        </el-alert>
+    <!-- 批量图片查看对话框 -->
+    <el-dialog title="检测结果详情" :visible.sync="imageViewVisible" width="80%">
+      <div v-if="currentViewImage">
+        <el-row :gutter="20">
+          <el-col :span="12">
+            <div class="media-container">
+              <h5>检测结果图片</h5>
+              <img :src="currentViewImage.annotated_url"
+                   alt="检测结果"
+                   style="max-width: 100%; max-height: 400px;" />
+            </div>
+          </el-col>
+          <el-col :span="12">
+            <div class="detection-details">
+              <h5>检测详情</h5>
+              <div class="detail-stats">
+                <p><strong>文件名：</strong>{{ currentViewImage.filename }}</p>
+                <p><strong>检测数量：</strong>{{ currentViewImage.detection_count }}</p>
+                <p><strong>推理时间：</strong>{{ currentViewImage.inference_time }}</p>
+              </div>
 
-        <el-table :data="batchResults" style="width: 100%" max-height="400">
-          <el-table-column label="序号" type="index" width="60" align="center" />
-          <el-table-column label="文件名" prop="filename" width="200" show-overflow-tooltip />
-          <el-table-column label="检测数量" prop="detection_count" width="100" align="center" />
-          <el-table-column label="推理时间" prop="inference_time" width="120" align="center" />
-          <el-table-column label="检测结果" prop="detections">
-            <template slot-scope="scope">
-              <el-tag
-                  v-for="(detection, index) in scope.row.detections.slice(0, 3)"
-                  :key="index"
-                  :type="detection.class_name === '火焰' ? 'danger' : 'warning'"
-                  size="mini"
-                  style="margin-right: 5px;">
-                {{ detection.class_name }}
-              </el-tag>
-              <span v-if="scope.row.detections.length > 3">...</span>
-            </template>
-          </el-table-column>
-        </el-table>
+              <el-table :data="currentViewImage.detections" style="width: 100%" border size="small" max-height="300">
+                <el-table-column label="序号" type="index" width="60" align="center" />
+                <el-table-column label="类别" prop="class_name" width="80" align="center">
+                  <template slot-scope="scope">
+                    <el-tag :type="scope.row.class_name === '火焰' ? 'danger' : 'warning'" size="mini">
+                      {{ scope.row.class_name }}
+                    </el-tag>
+                  </template>
+                </el-table-column>
+                <el-table-column label="置信度" prop="confidence" width="100" align="center">
+                  <template slot-scope="scope">
+                    <span>{{ Math.round(scope.row.confidence * 100) }}%</span>
+                  </template>
+                </el-table-column>
+                <el-table-column label="坐标位置" prop="bbox">
+                  <template slot-scope="scope">
+                    <span>{{ formatBbox(scope.row.bbox) }}</span>
+                  </template>
+                </el-table-column>
+              </el-table>
+            </div>
+          </el-col>
+        </el-row>
       </div>
       <span slot="footer" class="dialog-footer">
-        <el-button @click="batchResultVisible = false">关 闭</el-button>
+        <el-button @click="imageViewVisible = false">关 闭</el-button>
       </span>
     </el-dialog>
   </div>
@@ -289,8 +365,11 @@ export default {
         frameCount: 0,
         validFrameCount: 0,
         recordId: null,
+        batchId: null,
+        processedImages: 0,
         results: [],
         processedResults: [],
+        batchResults: [],
         annotatedUrl: '',
         originalUrl: ''
       },
@@ -299,14 +378,19 @@ export default {
       currentPage: 1,
       pageSize: 20,
 
+      // 批量结果分页
+      currentBatchPage: 1,
+      batchPageSize: 10,
+
       // 批量检测
       batchDialogVisible: false,
-      batchResultVisible: false,
       batchForm: {
         folderPath: ''
       },
-      batchResults: [],
-      batchTotalDetections: 0
+
+      // 图片查看
+      imageViewVisible: false,
+      currentViewImage: null
     }
   },
   computed: {
@@ -323,9 +407,34 @@ export default {
       const start = (this.currentPage - 1) * this.pageSize
       const end = start + this.pageSize
       return this.detectionResult.processedResults.slice(start, end)
+    },
+    currentPageBatchResults() {
+      const start = (this.currentBatchPage - 1) * this.batchPageSize
+      const end = start + this.batchPageSize
+      return (this.detectionResult.batchResults || []).slice(start, end)
     }
   },
   methods: {
+    // 获取文件类型标签类型
+    getFileTypeTagType(fileType) {
+      switch(fileType) {
+        case 'image': return 'success'
+        case 'video': return 'warning'
+        case 'batch_images': return 'info'
+        default: return 'info'
+      }
+    },
+
+    // 获取文件类型标签文本
+    getFileTypeLabel(fileType) {
+      switch(fileType) {
+        case 'image': return '图片检测'
+        case 'video': return '视频检测'
+        case 'batch_images': return '批量检测'
+        default: return '未知类型'
+      }
+    },
+
     // 图片上传前的检查
     beforeImageUpload(file) {
       const isImage = file.type.startsWith('image/')
@@ -390,11 +499,12 @@ export default {
     handleError(err, file) {
       this.imageLoading = false
       this.videoLoading = false
+      this.batchLoading = false
       console.error('上传错误:', err)
       this.$message.error('上传失败，请重试')
     },
 
-    // 显示检测结果 - 核心修改
+    // 显示检测结果 - 支持批量结果
     showDetectionResult(data) {
       console.log('原始检测数据:', data)
 
@@ -402,10 +512,13 @@ export default {
         show: true,
         fileType: data.file_type,
         inferenceTime: data.inference_time,
-        detectionCount: data.detection_count,
+        detectionCount: data.total_detections || data.detection_count,
         recordId: data.record_id,
+        batchId: data.batch_id,
+        processedImages: data.processed_images,
         results: data.results || [],
         processedResults: [],
+        batchResults: [],
         annotatedUrl: this.getAnnotatedFileUrl(data),
         originalUrl: data.original_file_url || '',
         frameCount: 0,
@@ -413,7 +526,9 @@ export default {
       }
 
       // 根据文件类型处理检测结果
-      if (data.file_type === 'video') {
+      if (data.file_type === 'batch_images') {
+        this.processBatchResults(data.results || [])
+      } else if (data.file_type === 'video') {
         this.processVideoResults(data.results || [])
       } else {
         this.processImageResults(data.results || [])
@@ -421,6 +536,16 @@ export default {
 
       // 重置分页
       this.currentPage = 1
+      this.currentBatchPage = 1
+    },
+
+    // 处理批量检测结果
+    processBatchResults(batchResults) {
+      console.log('处理批量结果:', batchResults)
+      this.detectionResult.batchResults = batchResults.map(result => ({
+        ...result,
+        annotated_url: this.$baseUrl + (result.annotated_url || '')
+      }))
     },
 
     // 处理视频检测结果
@@ -481,18 +606,22 @@ export default {
         frameCount: 0,
         validFrameCount: 0,
         recordId: null,
+        batchId: null,
+        processedImages: 0,
         results: [],
         processedResults: [],
+        batchResults: [],
         annotatedUrl: '',
         originalUrl: ''
       }
       this.currentPage = 1
+      this.currentBatchPage = 1
     },
 
     // 格式化边界框坐标
     formatBbox(bbox) {
       if (!bbox || !Array.isArray(bbox)) return '-'
-      return `(${bbox[0]}, ${bbox[1]}) - (${bbox[2]}, ${bbox[3]})`
+      return `(${Math.round(bbox[0])}, ${Math.round(bbox[1])}) - (${Math.round(bbox[2])}, ${Math.round(bbox[3])})`
     },
 
     // 分页处理
@@ -505,13 +634,23 @@ export default {
       this.currentPage = val
     },
 
+    // 批量结果分页处理
+    handleBatchSizeChange(val) {
+      this.batchPageSize = val
+      this.currentBatchPage = 1
+    },
+
+    handleBatchCurrentChange(val) {
+      this.currentBatchPage = val
+    },
+
     // 显示批量检测对话框
     showBatchDialog() {
       this.batchDialogVisible = true
       this.batchForm.folderPath = ''
     },
 
-    // 处理批量检测
+    // 处理批量检测 - 修改后的版本
     async handleBatchDetection() {
       if (!this.batchForm.folderPath.trim()) {
         this.$message.warning('请输入文件夹路径')
@@ -519,17 +658,19 @@ export default {
       }
 
       this.batchLoading = true
+      this.resetDetectionResult()
+
       try {
         const response = await this.$request.post('/visuals/detect/batch', {
           folderPath: this.batchForm.folderPath
         })
 
         if (response.code === '200') {
-          this.batchResults = response.data.results || []
-          this.batchTotalDetections = response.data.total_detections || 0
           this.batchDialogVisible = false
-          this.batchResultVisible = true
-          this.$message.success(`批量检测完成！共处理 ${this.batchResults.length} 张图片`)
+          this.$message.success(`批量检测完成！`)
+
+          // 直接在主页面显示批量检测结果
+          this.showDetectionResult(response.data)
         } else {
           this.$message.error(response.msg || '批量检测失败')
         }
@@ -539,6 +680,12 @@ export default {
       } finally {
         this.batchLoading = false
       }
+    },
+
+    // 查看批量检测的单张图片
+    viewBatchImage(imageData) {
+      this.currentViewImage = imageData
+      this.imageViewVisible = true
     }
   }
 }
@@ -623,11 +770,11 @@ export default {
   color: #303133;
 }
 
-.target-details, .result-media {
+.batch-results, .target-details, .result-media {
   margin-top: 25px;
 }
 
-.target-details h4, .result-media h4 {
+.batch-results h4, .target-details h4, .result-media h4 {
   color: #303133;
   margin-bottom: 15px;
   font-size: 16px;
@@ -655,6 +802,21 @@ export default {
 
 .image-comparison {
   margin-top: 20px;
+}
+
+.detection-details {
+  padding: 15px;
+  background-color: #fafafa;
+  border-radius: 4px;
+}
+
+.detail-stats {
+  margin-bottom: 15px;
+}
+
+.detail-stats p {
+  margin: 8px 0;
+  color: #606266;
 }
 
 /deep/ .el-upload {

@@ -39,6 +39,7 @@ public class CorsConfig {
 
         // 对不同路径应用不同配置
         source.registerCorsConfiguration("/visuals/result/**", mediaConfig);  // 媒体文件
+        source.registerCorsConfiguration("/visuals/batch/**", mediaConfig);   // 批量结果文件
         source.registerCorsConfiguration("/files/**", mediaConfig);           // 普通文件
         source.registerCorsConfiguration("/**", generalConfig);               // 其他接口
 
