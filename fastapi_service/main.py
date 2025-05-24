@@ -623,6 +623,187 @@ async def stream_video(file: UploadFile = File(...)):
         logger.error(f"Error in stream_video: {str(e)}\n{error_traceback}")
         raise HTTPException(status_code=500, detail=str(e))
 
+
+@app.post("/detect_frame")
+async def detect_camera_frame(file: UploadFile = File(...)):
+    """
+    单帧图像检测API - 适用于其他web服务接入
+
+    接收单张图像，返回检测结果和标注后的图像
+    """
+    try:
+        # 检查模型是否加载成功
+        if yolo_model is None:
+            raise HTTPException(
+                status_code=500,
+                detail="Model is not loaded properly."
+            )
+
+        # 验证文件是图像
+        content_type = file.content_type
+        if not content_type.startswith("image"):
+            raise HTTPException(status_code=400, detail="Uploaded file must be an image")
+
+        # 读取图像数据
+        contents = await file.read()
+
+        # 使用OpenCV解码图像
+        img = cv2.imdecode(np.frombuffer(contents, np.uint8), cv2.IMREAD_COLOR)
+        if img is None:
+            raise HTTPException(status_code=400, detail="Failed to decode image")
+
+        logger.info(f"Processing single frame, shape: {img.shape}")
+
+        # 运行模型推理
+        start_time = time.time()
+        results = yolo_model(img)[0]
+        inference_time = (time.time() - start_time) * 1000  # 毫秒
+
+        # 获取检测结果
+        boxes = results.boxes
+        detections = []
+
+        if len(boxes) > 0:
+            location_list = boxes.xyxy.cpu().numpy().tolist() if hasattr(boxes.xyxy, 'cpu') else boxes.xyxy.tolist()
+            cls_list = boxes.cls.cpu().numpy().tolist() if hasattr(boxes.cls, 'cpu') else boxes.cls.tolist()
+            conf_list = boxes.conf.cpu().numpy().tolist() if hasattr(boxes.conf, 'cpu') else boxes.conf.tolist()
+
+            for box, cls, conf in zip(location_list, cls_list, conf_list):
+                cls_int = int(cls)
+                detections.append({
+                    "bbox": [int(x) for x in box],  # [x1, y1, x2, y2]
+                    "class": cls_int,
+                    "class_name": Config.CH_names[cls_int] if cls_int < len(Config.CH_names) else f"未知类别{cls_int}",
+                    "confidence": float(conf)
+                })
+
+        # 获取标注后的图像
+        annotated_image = results.plot()
+
+        # 将标注图像编码为base64
+        _, buffer = cv2.imencode('.jpg', annotated_image)
+        annotated_base64 = base64.b64encode(buffer).decode('utf-8')
+
+        return {
+            "success": True,
+            "detections": detections,
+            "detection_count": len(detections),
+            "inference_time": f"{inference_time:.2f} ms",
+            "annotated_image": f"data:image/jpeg;base64,{annotated_base64}",
+            "image_size": {
+                "width": img.shape[1],
+                "height": img.shape[0]
+            },
+            "class_names": Config.CH_names
+        }
+
+    except Exception as e:
+        import traceback
+        error_traceback = traceback.format_exc()
+        logger.error(f"Error in detect_camera_frame: {str(e)}\n{error_traceback}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/detect_frame_base64")
+async def detect_frame_base64(request: dict):
+    """
+    Base64图像检测API - 适用于其他web服务发送base64编码的图像
+
+    请求格式:
+    {
+        "image": "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQ...",
+        "options": {
+            "return_annotated": true,
+            "image_quality": 0.8
+        }
+    }
+    """
+    try:
+        # 检查模型是否加载成功
+        if yolo_model is None:
+            raise HTTPException(
+                status_code=500,
+                detail="Model is not loaded properly."
+            )
+
+        # 获取base64图像数据
+        image_data = request.get('image', '')
+        options = request.get('options', {})
+
+        if not image_data:
+            raise HTTPException(status_code=400, detail="No image data provided")
+
+        # 解码base64图像
+        if ',' in image_data:
+            image_data = image_data.split(',')[1]  # 移除data:image/jpeg;base64,前缀
+
+        try:
+            decoded_data = base64.b64decode(image_data)
+            np_arr = np.frombuffer(decoded_data, np.uint8)
+            img = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Failed to decode base64 image: {str(e)}")
+
+        if img is None:
+            raise HTTPException(status_code=400, detail="Failed to decode image data")
+
+        logger.info(f"Processing base64 frame, shape: {img.shape}")
+
+        # 运行模型推理
+        start_time = time.time()
+        results = yolo_model(img)[0]
+        inference_time = (time.time() - start_time) * 1000  # 毫秒
+
+        # 获取检测结果
+        boxes = results.boxes
+        detections = []
+
+        if len(boxes) > 0:
+            location_list = boxes.xyxy.cpu().numpy().tolist() if hasattr(boxes.xyxy, 'cpu') else boxes.xyxy.tolist()
+            cls_list = boxes.cls.cpu().numpy().tolist() if hasattr(boxes.cls, 'cpu') else boxes.cls.tolist()
+            conf_list = boxes.conf.cpu().numpy().tolist() if hasattr(boxes.conf, 'cpu') else boxes.conf.tolist()
+
+            for box, cls, conf in zip(location_list, cls_list, conf_list):
+                cls_int = int(cls)
+                detections.append({
+                    "bbox": [int(x) for x in box],
+                    "class": cls_int,
+                    "class_name": Config.CH_names[cls_int] if cls_int < len(Config.CH_names) else f"未知类别{cls_int}",
+                    "confidence": float(conf)
+                })
+
+        # 构建响应
+        response = {
+            "success": True,
+            "detections": detections,
+            "detection_count": len(detections),
+            "inference_time": f"{inference_time:.2f} ms",
+            "image_size": {
+                "width": img.shape[1],
+                "height": img.shape[0]
+            },
+            "class_names": Config.CH_names
+        }
+
+        # 如果需要返回标注图像
+        if options.get('return_annotated', False):
+            annotated_image = results.plot()
+            quality = options.get('image_quality', 0.8)
+
+            _, buffer = cv2.imencode('.jpg', annotated_image, [cv2.IMWRITE_JPEG_QUALITY, int(quality * 100)])
+            annotated_base64 = base64.b64encode(buffer).decode('utf-8')
+            response['annotated_image'] = f"data:image/jpeg;base64,{annotated_base64}"
+
+        return response
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        error_traceback = traceback.format_exc()
+        logger.error(f"Error in detect_frame_base64: {str(e)}\n{error_traceback}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.get("/test_video_stream")
 async def test_video_stream():
     """返回视频流测试页面"""
@@ -680,6 +861,51 @@ async def model_details():
             "shape": results.boxes.shape,
             "device": str(results.boxes.device) if hasattr(results.boxes, "device") else "unknown"
         }
+    }
+
+@app.get("/api/info")
+async def api_info():
+    """获取API信息和使用说明"""
+    return {
+        "api_name": "YOLOv10 Fire and Smoke Detection API",
+        "version": "1.0.0",
+        "description": "基于YOLOv10的火焰和烟雾检测服务",
+        "endpoints": {
+            "image_detection": {
+                "/detect": "上传单张图片进行检测（支持图片和视频）",
+                "/detect_frame": "单帧图像检测（适用于外部服务）",
+                "/detect_frame_base64": "Base64图像检测（适用于API调用）",
+                "/detect_batch": "批量图片检测"
+            },
+            "video_processing": {
+                "/stream_video": "上传视频并获取WebSocket信息",
+                "/ws/video_stream": "WebSocket实时视频流处理"
+            },
+            "system": {
+                "/health": "健康检查",
+                "/api/info": "API信息",
+                "/model_details": "模型详细信息"
+            }
+        },
+        "supported_formats": {
+            "images": ["jpg", "jpeg", "png", "bmp", "tif", "tiff", "webp"],
+            "videos": ["mp4", "avi", "mov", "mkv"]
+        },
+        "detection_classes": {
+            "0": "火焰 (fire)",
+            "1": "烟雾 (smoke)"
+        }
+    }
+
+@app.get("/api/status")
+async def api_status():
+    """获取API运行状态"""
+    return {
+        "status": "running",
+        "model_loaded": yolo_model is not None,
+        "websocket_connections": len(stream_processor.active_connections) if stream_processor else 0,
+        "processing_threads": len(stream_processor.processing_threads) if stream_processor else 0,
+        "timestamp": time.time()
     }
 
 
