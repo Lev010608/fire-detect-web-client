@@ -1331,14 +1331,45 @@ export default {
       switch (message.type) {
         case 'progress_update':
           if (message.data) {
-            this.streamProcessing.progress = message.data
+            this.streamProcessing.progress = {
+              current: message.data.current,
+              total: message.data.total,
+              percent: message.data.percent
+            }
           }
           break
 
         case 'detection_result':
           if (message.data) {
-            this.handleRealtimeDetectionResult(message.data)
+            this.handleRealtimeFrameResult(message.data)
           }
+          break
+
+        case 'video_info':
+          console.log('视频信息:', message.data)
+          if (message.data && message.data.total_frames) {
+            this.streamProcessing.progress.total = message.data.total_frames
+          }
+          break
+
+        case 'processing_started':
+          console.log('FastAPI开始处理视频')
+          this.streamProcessing.status = 'processing'
+          break
+
+        case 'processing_complete':
+          console.log('视频处理完成:', message.data)
+          this.handleVideoProcessingComplete(message.data)
+          break
+
+        case 'fastapi_connected':
+          console.log('FastAPI WebSocket已连接')
+          break
+
+        case 'connection_error':
+          console.error('FastAPI连接错误:', message.message)
+          this.$message.error(message.message)
+          this.streamProcessing.status = 'failed'
           break
 
         case 'connection_established':
@@ -1346,7 +1377,82 @@ export default {
           break
 
         default:
-          console.log('未处理的消息类型:', message.type)
+          console.log('未处理的消息类型:', message.type, message)
+      }
+    },
+
+// 🔥 新增：处理实时帧结果
+    handleRealtimeFrameResult(data) {
+      try {
+        // 更新当前帧显示
+        this.streamProcessing.currentFrame = {
+          frameId: data.frame_id,
+          detectionCount: data.detection_count,
+          inferenceTime: data.inference_time,
+          annotatedFrame: data.annotated_frame
+        }
+
+        // 累计检测数量
+        this.streamProcessing.totalDetections += data.detection_count || 0
+
+        // 如果有进度信息，更新进度条
+        if (data.progress) {
+          this.streamProcessing.progress = data.progress
+        }
+
+      } catch (error) {
+        console.error('处理帧结果失败:', error)
+      }
+    },
+
+    // 🔥 新增：处理视频处理完成
+    handleVideoProcessingComplete(data) {
+      try {
+        console.log('处理完成数据:', data)
+
+        // 更新处理状态
+        this.streamProcessing.status = 'completed'
+
+        // 设置进度为100%
+        this.streamProcessing.progress = {
+          current: data.frame_count || 100,
+          total: data.frame_count || 100,
+          percent: 100
+        }
+
+        // 更新检测统计
+        this.streamProcessing.totalDetections = data.detection_count || 0
+
+        // 🔥 关键：显示处理后的视频
+        if (data.annotated_video) {
+          // 提取文件名
+          const filename = data.annotated_video.split(/[/\\]/).pop()
+          const videoUrl = `${this.$baseUrl}/visuals/result/${filename}`
+
+          console.log('标注视频URL:', videoUrl)
+
+          // 显示检测结果区域
+          this.detectionResult = {
+            show: true,
+            fileType: 'video',
+            inferenceTime: data.inference_time || '处理完成',
+            detectionCount: data.detection_count || 0,
+            frameCount: data.frame_count || 0,
+            annotatedUrl: videoUrl,
+            processedResults: data.results || []
+          }
+
+          // 处理视频检测结果详情
+          if (data.results && Array.isArray(data.results)) {
+            this.processVideoResults(data.results)
+          }
+        }
+
+        this.$message.success('视频流处理完成！')
+
+      } catch (error) {
+        console.error('处理完成消息处理失败:', error)
+        this.$message.error('处理结果解析失败')
       }
     },
 
