@@ -225,7 +225,19 @@ public class FastApiWebSocketClient {
                     break;
 
                 case "processing_complete":
-                    // 处理完成
+                    // 处理完成 - 保存到数据库
+                    logger.info("视频流处理完成，开始保存到数据库");
+
+                    // 异步保存到数据库
+                    new Thread(() -> {
+                        try {
+                            saveVideoStreamResult(springSessionId, messageData);
+                        } catch (Exception e) {
+                            logger.error("保存视频流结果到数据库失败", e);
+                        }
+                    }).start();
+
+                    // 转发完成消息到前端
                     com.example.controller.RealtimeWebSocketEndpoint.sendMessage(springSessionId,
                             objectMapper.writeValueAsString(Map.of(
                                     "type", "processing_complete",
@@ -270,6 +282,27 @@ public class FastApiWebSocketClient {
 
         } catch (Exception e) {
             logger.error("转发消息到Spring WebSocket失败: " + springSessionId, e);
+        }
+    }
+
+    /**
+     * 保存视频流处理结果到数据库
+     */
+    private static void saveVideoStreamResult(String springSessionId, Map<String, Object> completeData) {
+        try {
+            // 获取服务实例 - 通过ApplicationContext
+            com.example.service.RealtimeVideoService realtimeVideoService =
+                    com.example.utils.SpringContextUtil.getBean(com.example.service.RealtimeVideoService.class);
+
+            if (realtimeVideoService != null) {
+                realtimeVideoService.saveStreamProcessingResultFromWebSocket(springSessionId, completeData);
+                logger.info("视频流处理结果已保存到数据库: " + springSessionId);
+            } else {
+                logger.error("无法获取RealtimeVideoService实例");
+            }
+
+        } catch (Exception e) {
+            logger.error("保存视频流处理结果失败: " + springSessionId, e);
         }
     }
 

@@ -6,6 +6,7 @@ import com.example.utils.FastApiWebSocketClient;
 import com.example.utils.HttpClientUtil;
 import com.example.utils.TokenUtils;
 import com.example.entity.Account;
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -179,6 +180,72 @@ public class RealtimeVideoService {
 
             saveStreamProcessingResult(session);
             logger.info("视频流处理已停止: " + sessionId);
+        }
+    }
+
+    /**
+     * 从WebSocket保存视频流处理结果
+     */
+    public void saveStreamProcessingResultFromWebSocket(String sessionId, Map<String, Object> completeData) throws JsonProcessingException {
+        try {
+            logger.info("开始保存WebSocket视频流处理结果: " + sessionId);
+
+            // 解析完成数据
+            Map<String, Object> videoInfo = (Map<String, Object>) completeData.get("video_info");
+            Map<String, Object> processingStats = (Map<String, Object>) completeData.get("processing_stats");
+            Map<String, Object> outputInfo = (Map<String, Object>) completeData.get("output_info");
+
+            // 创建数据库记录
+            LabeledVisuals record = new LabeledVisuals();
+            record.setOriginalFileName("realtime_stream_" + sessionId);
+            record.setFileType("realtime_video_stream");
+            record.setDetectionCount((Integer) processingStats.get("total_detections"));
+            record.setStatus("completed");
+            record.setCreatedTime(new Date());
+            record.setUpdatedTime(new Date());
+
+            // 设置推理时间
+            Double processingTimeMs = (Double) processingStats.get("processing_time_ms");
+            record.setInferenceTime(processingTimeMs + " ms");
+
+            // 🔥 设置原始文件URL和输出文件URL
+            String outputPath = (String) outputInfo.get("output_path");
+            if (outputPath != null) {
+                // 提取文件名并构建访问URL
+                String filename = outputPath.substring(outputPath.lastIndexOf(File.separator) + 1);
+                record.setAnnotatedFileUrl("/visuals/result/" + filename);
+
+                // 🔥 构建原始文件URL - 基于sessionId推断原始文件名
+                String originalFilename = "stream_" + sessionId + ".mp4"; // 这应该与上传时的命名一致
+                record.setOriginalFileUrl("/visuals/result/" + originalFilename);
+            }
+
+            // 构建检测结果JSON
+            Map<String, Object> detectionResults = new HashMap<>();
+            detectionResults.put("file_type", "realtime_video_stream");
+            detectionResults.put("session_id", sessionId);
+            detectionResults.put("video_info", videoInfo);
+            detectionResults.put("processing_stats", processingStats);
+            detectionResults.put("output_info", outputInfo);
+            detectionResults.put("detection_results", completeData.get("detection_results"));
+            detectionResults.put("saved_time", new Date());
+
+            record.setDetectionResults(objectMapper.writeValueAsString(detectionResults));
+
+            // 获取当前用户
+            Account currentUser = TokenUtils.getCurrentUser();
+            if (currentUser != null && currentUser.getId() != null) {
+                record.setUserId(currentUser.getId());
+            }
+
+            // 保存到数据库
+            labeledVisualsService.add(record);
+
+            logger.info("WebSocket视频流处理结果已保存到数据库: " + sessionId + ", 记录ID: " + record.getId());
+
+        } catch (Exception e) {
+            logger.error("保存WebSocket视频流处理结果失败: " + sessionId, e);
+            throw e;
         }
     }
 

@@ -111,6 +111,31 @@
               </div>
             </el-card>
           </el-col>
+          <!--视频流统计 -->
+          <el-col :span="6" v-if="detectionResult.fileType === 'realtime_video_stream'">
+            <el-card shadow="never">
+              <div class="stat-item">
+                <div class="stat-label">视频分辨率</div>
+                <div class="stat-value">{{ detectionResult.videoStreamStats.width }}×{{ detectionResult.videoStreamStats.height }}</div>
+              </div>
+            </el-card>
+          </el-col>
+          <el-col :span="6" v-if="detectionResult.fileType === 'realtime_video_stream'">
+            <el-card shadow="never">
+              <div class="stat-item">
+                <div class="stat-label">视频帧率</div>
+                <div class="stat-value">{{ detectionResult.videoStreamStats.fps.toFixed(1) }} FPS</div>
+              </div>
+            </el-card>
+          </el-col>
+          <el-col :span="6" v-if="detectionResult.fileType === 'realtime_video_stream'">
+            <el-card shadow="never">
+              <div class="stat-item">
+                <div class="stat-label">平均推理时间</div>
+                <div class="stat-value">{{ detectionResult.videoStreamStats.avgInferenceTime.toFixed(1) }} ms</div>
+              </div>
+            </el-card>
+          </el-col>
         </el-row>
       </div>
 
@@ -169,6 +194,60 @@
       <div class="target-details" v-if="detectionResult.processedResults && detectionResult.processedResults.length > 0 && detectionResult.fileType !== 'batch_images'">
         <h4>检测详情</h4>
 
+        <!-- 实时视频流检测结果 -->
+        <div v-if="detectionResult.fileType === 'realtime_video_stream'">
+          <el-alert
+              title="实时视频流检测结果"
+              :description="`共处理${detectionResult.totalFrames}帧，检测到${detectionResult.detectionCount}个目标物体，平均推理时间${detectionResult.videoStreamStats ? detectionResult.videoStreamStats.avgInferenceTime.toFixed(1) : 0}ms`"
+              type="success"
+              :closable="false"
+              style="margin-bottom: 15px">
+          </el-alert>
+
+          <el-table
+              :data="currentPageStreamResults"
+              style="width: 100%"
+              border
+              max-height="400">
+            <el-table-column label="帧序号" prop="frameIndex" width="80" align="center" />
+            <el-table-column label="目标数量" prop="objectIndex" width="80" align="center" />
+            <el-table-column label="类别" prop="class_name" width="100" align="center">
+              <template slot-scope="scope">
+                <el-tag :type="scope.row.class_name === '火焰' ? 'danger' : 'warning'">
+                  {{ scope.row.class_name }}
+                </el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column label="置信度" prop="confidence" width="120" align="center">
+              <template slot-scope="scope">
+                <el-progress
+                    :percentage="Math.round(scope.row.confidence * 100)"
+                    :color="scope.row.confidence > 0.7 ? '#67c23a' : scope.row.confidence > 0.5 ? '#e6a23c' : '#f56c6c'"
+                    :stroke-width="10">
+                </el-progress>
+              </template>
+            </el-table-column>
+            <el-table-column label="坐标位置" prop="bbox">
+              <template slot-scope="scope">
+                <span>{{ formatBbox(scope.row.bbox) }}</span>
+              </template>
+            </el-table-column>
+          </el-table>
+
+          <!-- 🔥 实时视频流分页 -->
+          <el-pagination
+              v-if="detectionResult.processedResults.length > streamPageSize"
+              @size-change="handleStreamSizeChange"
+              @current-change="handleStreamCurrentChange"
+              :current-page="currentStreamPage"
+              :page-sizes="[10, 20, 50, 100]"
+              :page-size="streamPageSize"
+              layout="total, sizes, prev, pager, next, jumper"
+              :total="detectionResult.processedResults.length"
+              style="margin-top: 20px; text-align: center">
+          </el-pagination>
+        </div>
+
         <!-- 视频检测结果按帧显示 -->
         <div v-if="detectionResult.fileType === 'video'">
           <el-alert
@@ -224,7 +303,7 @@
         </div>
 
         <!-- 图片检测结果 -->
-        <div v-else>
+        <div v-else-if="detectionResult.fileType === 'image'">
           <el-table :data="detectionResult.processedResults" style="width: 100%" border>
             <el-table-column label="序号" type="index" width="60" align="center" />
             <el-table-column label="类别" prop="class_name" width="100" align="center">
@@ -276,6 +355,94 @@
               </div>
             </el-col>
           </el-row>
+        </div>
+
+        <!--实时视频流结果视频展示 -->
+        <div class="result-media" v-if="detectionResult.fileType === 'realtime_video_stream' && detectionResult.annotatedUrl">
+          <h4>实时处理结果视频</h4>
+
+          <!-- 视频信息卡片 -->
+          <el-card class="video-info-card" v-if="detectionResult.videoStreamStats">
+            <div slot="header" class="video-info-header">
+              <span>视频信息</span>
+            </div>
+            <el-row :gutter="20">
+              <el-col :span="8">
+                <div class="info-item">
+                  <span class="info-label">分辨率:</span>
+                  <span class="info-value">{{ detectionResult.videoStreamStats.width }}×{{ detectionResult.videoStreamStats.height }}</span>
+                </div>
+              </el-col>
+              <el-col :span="8">
+                <div class="info-item">
+                  <span class="info-label">帧率:</span>
+                  <span class="info-value">{{ detectionResult.videoStreamStats.fps.toFixed(1) }} FPS</span>
+                </div>
+              </el-col>
+              <el-col :span="8">
+                <div class="info-item">
+                  <span class="info-label">时长:</span>
+                  <span class="info-value">{{ detectionResult.videoStreamStats.duration.toFixed(1) }} 秒</span>
+                </div>
+              </el-col>
+            </el-row>
+            <el-row :gutter="20" style="margin-top: 10px;">
+              <el-col :span="8">
+                <div class="info-item">
+                  <span class="info-label">文件大小:</span>
+                  <span class="info-value">{{ formatFileSize(detectionResult.videoStreamStats.fileSize) }}</span>
+                </div>
+              </el-col>
+              <el-col :span="8">
+                <div class="info-item">
+                  <span class="info-label">总处理时间:</span>
+                  <span class="info-value">{{ detectionResult.videoStreamStats.processingTimeSeconds.toFixed(1) }} 秒</span>
+                </div>
+              </el-col>
+              <el-col :span="8">
+                <div class="info-item">
+                  <span class="info-label">平均推理:</span>
+                  <span class="info-value">{{ detectionResult.videoStreamStats.avgInferenceTime.toFixed(1) }} ms/帧</span>
+                </div>
+              </el-col>
+            </el-row>
+          </el-card>
+
+          <!-- 视频播放器 -->
+          <div class="video-display">
+            <div class="media-container">
+              <h5>标注后的检测结果视频</h5>
+              <video
+                  :src="detectionResult.annotatedUrl"
+                  controls
+                  preload="metadata"
+                  style="max-width: 100%; max-height: 600px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);"
+                  @loadstart="onVideoLoadStart"
+                  @loadeddata="onVideoLoaded"
+                  @error="onVideoError">
+                您的浏览器不支持视频播放，请尝试
+                <a :href="detectionResult.annotatedUrl" download>下载视频</a>
+              </video>
+
+              <!-- 视频加载状态 -->
+              <div v-if="videoLoading" class="video-loading">
+                <i class="el-icon-loading"></i>
+                <p>视频加载中...</p>
+              </div>
+
+              <!-- 视频加载失败 -->
+              <div v-if="videoError" class="video-error">
+                <i class="el-icon-warning"></i>
+                <p>视频加载失败</p>
+                <el-button size="small" @click="retryVideoLoad">重试</el-button>
+                <el-button size="small" type="primary">
+                  <a :href="detectionResult.annotatedUrl" download style="color: inherit; text-decoration: none;">
+                    下载视频
+                  </a>
+                </el-button>
+              </div>
+            </div>
+          </div>
         </div>
 
         <!-- 视频展示 -->
@@ -610,6 +777,7 @@ export default {
       imageLoading: false,
       videoLoading: false,
       batchLoading: false,
+      videoError: false,
 
       // 检测结果数据
       detectionResult: {
@@ -626,7 +794,8 @@ export default {
         processedResults: [],
         batchResults: [],
         annotatedUrl: '',
-        originalUrl: ''
+        originalUrl: '',
+        videoStreamStats: null
       },
 
       // 分页相关
@@ -636,6 +805,10 @@ export default {
       // 批量结果分页
       currentBatchPage: 1,
       batchPageSize: 10,
+
+      // 🔥 新增：实时视频流分页变量
+      currentStreamPage: 1,
+      streamPageSize: 20,
 
       // 批量检测
       batchDialogVisible: false,
@@ -716,6 +889,15 @@ export default {
       const start = (this.currentBatchPage - 1) * this.batchPageSize
       const end = start + this.batchPageSize
       return (this.detectionResult.batchResults || []).slice(start, end)
+    },
+    currentPageStreamResults() {
+      if (this.detectionResult.fileType !== 'realtime_video_stream') {
+        return this.currentPageResults // 使用原有逻辑
+      }
+
+      const start = (this.currentStreamPage - 1) * this.streamPageSize
+      const end = start + this.streamPageSize
+      return this.detectionResult.processedResults.slice(start, end)
     }
   },
   methods: {
@@ -916,10 +1098,12 @@ export default {
         processedResults: [],
         batchResults: [],
         annotatedUrl: '',
-        originalUrl: ''
+        originalUrl: '',
+        videoStreamStats: null
       }
       this.currentPage = 1
       this.currentBatchPage = 1
+      this.currentStreamPage = 1
     },
 
     // 格式化边界框坐标
@@ -1106,9 +1290,58 @@ export default {
       }
     },
 
+    // 🔥 新增：实时视频流分页处理
+    handleStreamSizeChange(val) {
+      this.streamPageSize = val
+      this.currentStreamPage = 1
+    },
+
+    handleStreamCurrentChange(val) {
+      this.currentStreamPage = val
+    },
+
     // 🔥 新增：摄像头检测方法
     showCameraDialog() {
       this.cameraDialogVisible = true
+    },
+    // 🔥 新增：格式化文件大小
+    formatFileSize(bytes) {
+      if (bytes === 0) return '0 B'
+      const k = 1024
+      const sizes = ['B', 'KB', 'MB', 'GB']
+      const i = Math.floor(Math.log(bytes) / Math.log(k))
+      return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
+    },
+
+    // 🔥 新增：视频加载事件处理
+    onVideoLoadStart() {
+      this.videoLoading = true
+      this.videoError = false
+    },
+
+    onVideoLoaded() {
+      this.videoLoading = false
+      this.videoError = false
+      console.log('视频加载成功')
+    },
+
+    onVideoError(event) {
+      this.videoLoading = false
+      this.videoError = true
+      console.error('视频加载失败:', event)
+    },
+    retryVideoLoad() {
+      this.videoError = false
+      this.videoLoading = true
+      // 重新设置视频src来触发重新加载
+      const video = document.querySelector('video')
+      if (video) {
+        const currentSrc = video.src
+        video.src = ''
+        setTimeout(() => {
+          video.src = currentSrc
+        }, 100)
+      }
     },
 
     async startCameraDetection() {
@@ -1297,6 +1530,26 @@ export default {
 
           this.websocket.onopen = () => {
             console.log('WebSocket连接已建立:', sessionId)
+
+            // 🔥 连接建立后发送用户信息
+            try {
+              const user = JSON.parse(localStorage.getItem('xm-user') || '{}')
+              if (user.id) {
+                const userInfo = {
+                  type: 'user_info',
+                  data: {
+                    userId: user.id,
+                    username: user.username || '',
+                    sessionId: sessionId
+                  }
+                }
+                this.websocket.send(JSON.stringify(userInfo))
+                console.log('已发送用户信息:', userInfo)
+              }
+            } catch (e) {
+              console.warn('发送用户信息失败:', e)
+            }
+
             resolve()
           }
 
@@ -1410,50 +1663,79 @@ export default {
       try {
         console.log('处理完成数据:', data)
 
-        // 更新处理状态
+        // 更新流处理状态
         this.streamProcessing.status = 'completed'
+        this.streamProcessing.progress.percent = 100
 
-        // 设置进度为100%
-        this.streamProcessing.progress = {
-          current: data.frame_count || 100,
-          total: data.frame_count || 100,
-          percent: 100
+        // 🔥 显示完整的检测结果区域
+        const videoInfo = data.video_info || {}
+        const processingStats = data.processing_stats || {}
+        const outputInfo = data.output_info || {}
+
+        // 构建检测结果URL
+        let annotatedVideoUrl = ''
+        if (outputInfo.output_path) {
+          const filename = outputInfo.output_path.split(/[/\\]/).pop()
+          annotatedVideoUrl = `${this.$baseUrl}/visuals/result/${filename}`
         }
 
-        // 更新检测统计
-        this.streamProcessing.totalDetections = data.detection_count || 0
+        // 显示检测结果区域
+        this.detectionResult = {
+          show: true,
+          fileType: 'realtime_video_stream',
+          inferenceTime: processingStats.processing_time_ms + ' ms' || '处理完成',
+          detectionCount: processingStats.total_detections || this.streamProcessing.totalDetections,
+          frameCount: processingStats.frames_processed || 0,
+          totalFrames: processingStats.total_frames || 0,
+          annotatedUrl: annotatedVideoUrl,
+          processedResults: data.detection_results || [],
 
-        // 🔥 关键：显示处理后的视频
-        if (data.annotated_video) {
-          // 提取文件名
-          const filename = data.annotated_video.split(/[/\\]/).pop()
-          const videoUrl = `${this.$baseUrl}/visuals/result/${filename}`
-
-          console.log('标注视频URL:', videoUrl)
-
-          // 显示检测结果区域
-          this.detectionResult = {
-            show: true,
-            fileType: 'video',
-            inferenceTime: data.inference_time || '处理完成',
-            detectionCount: data.detection_count || 0,
-            frameCount: data.frame_count || 0,
-            annotatedUrl: videoUrl,
-            processedResults: data.results || []
-          }
-
-          // 处理视频检测结果详情
-          if (data.results && Array.isArray(data.results)) {
-            this.processVideoResults(data.results)
+          // 🔥 视频流特有的统计信息
+          videoStreamStats: {
+            width: videoInfo.width,
+            height: videoInfo.height,
+            fps: videoInfo.fps,
+            duration: videoInfo.duration,
+            avgInferenceTime: processingStats.avg_inference_time,
+            fileSize: outputInfo.file_size,
+            processingTimeSeconds: processingStats.processing_time_seconds
           }
         }
 
-        this.$message.success('视频流处理完成！')
+        // 处理视频检测结果详情
+        if (data.detection_results && Array.isArray(data.detection_results)) {
+          this.processVideoStreamResults(data.detection_results)
+        }
+
+        this.$message.success('实时视频流处理完成！结果已保存到数据库')
 
       } catch (error) {
         console.error('处理完成消息处理失败:', error)
         this.$message.error('处理结果解析失败')
       }
+    },
+
+    // 🔥 新增：处理视频流检测结果
+    processVideoStreamResults(frameResults) {
+      const processedResults = []
+
+      frameResults.forEach((frameDetections, frameIndex) => {
+        if (frameDetections && Array.isArray(frameDetections) && frameDetections.length > 0) {
+          frameDetections.forEach((detection, objectIndex) => {
+            processedResults.push({
+              frameIndex: frameIndex + 1,
+              objectIndex: objectIndex + 1,
+              class_name: detection.class_name,
+              confidence: detection.confidence,
+              bbox: detection.bbox,
+              class: detection.class
+            })
+          })
+        }
+      })
+
+      this.detectionResult.processedResults = processedResults
+      console.log('处理后的视频流结果:', processedResults)
     },
 
     handleRealtimeDetectionResult(data) {
@@ -1774,6 +2056,55 @@ export default {
   margin: 8px 0;
   color: #606266;
 }
+
+/* 🔥 新增：视频相关样式 */
+.video-info-card {
+  margin-bottom: 20px;
+}
+
+.video-info-header {
+  font-weight: 600;
+  color: #303133;
+}
+
+.info-item {
+  display: flex;
+  align-items: center;
+  padding: 5px 0;
+}
+
+.info-label {
+  font-weight: 500;
+  color: #606266;
+  margin-right: 8px;
+  min-width: 70px;
+}
+
+.info-value {
+  color: #303133;
+  font-weight: 600;
+}
+
+.video-loading, .video-error {
+  text-align: center;
+  padding: 40px;
+  color: #909399;
+}
+
+.video-loading i, .video-error i {
+  font-size: 32px;
+  margin-bottom: 10px;
+  display: block;
+}
+
+.video-error {
+  color: #f56c6c;
+}
+
+.video-error .el-button {
+  margin: 0 5px;
+}
+
 
 /deep/ .el-upload {
   display: inline-block;
