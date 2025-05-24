@@ -7,22 +7,24 @@ const request = axios.create({
     timeout: 30000                          // 30s请求超时
 })
 
-// request 拦截器
-// 可以自请求发送前对请求做一些处理
-// 比如统一加token，对请求参数统一加密
+// request 拦截器 - 修复版本
 request.interceptors.request.use(config => {
-    config.headers['Content-Type'] = 'application/json;charset=utf-8';        // 设置请求头格式
-    let user = JSON.parse(localStorage.getItem("xm-user") || '{}')  // 获取缓存的用户信息
-    config.headers['token'] = user.token  // 设置请求头
+    // 🔥 关键修复：只有在不是FormData时才设置Content-Type
+    if (!(config.data instanceof FormData)) {
+        config.headers['Content-Type'] = 'application/json;charset=utf-8';
+    }
+    // 如果是FormData，让浏览器自动设置Content-Type（包含boundary）
+
+    let user = JSON.parse(localStorage.getItem("xm-user") || '{}')
+    config.headers['token'] = user.token
 
     return config
 }, error => {
-    console.error('request error: ' + error) // for debug
+    console.error('request error: ' + error)
     return Promise.reject(error)
 });
 
-// response 拦截器
-// 可以在接口响应后统一处理结果
+// response 拦截器保持不变
 request.interceptors.response.use(
     response => {
         let res = response.data;
@@ -37,10 +39,9 @@ request.interceptors.response.use(
         return res;
     },
     error => {
-        console.error('response error: ' + error) // for debug
+        console.error('response error: ' + error)
         return Promise.reject(error)
     }
 )
-
 
 export default request

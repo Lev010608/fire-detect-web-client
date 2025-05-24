@@ -269,14 +269,14 @@ public class VisualsLabelingController {
     @GetMapping("/batch/{filename}")
     public ResponseEntity<byte[]> getBatchResultFile(@PathVariable String filename) {
         try {
-            logger.info("=== 获取批量检测结果文件 ===");
+            logger.info("=== 获取批量检测结果文件 (快速修复版) ===");
             logger.info("请求文件名: " + filename);
 
-            // 从FastAPI获取文件数据
-            byte[] fileData = HttpClientUtil.getResultFile(filename);
+            // 直接从本地FastAPI结果目录获取文件
+            byte[] fileData = getFileFromFastApiResultDir(filename);
 
             if (fileData == null || fileData.length == 0) {
-                logger.error("从FastAPI获取的批量结果文件数据为空: " + filename);
+                logger.error("无法找到批量结果文件: " + filename);
                 return new ResponseEntity<>(HttpStatus.NOT_FOUND);
             }
 
@@ -296,16 +296,16 @@ public class VisualsLabelingController {
             headers.setContentType(MediaType.parseMediaType(contentType));
             headers.setContentLength(fileData.length);
 
-            // 🔥 设置CORS头部
+            // 设置CORS头部
             headers.add("Access-Control-Allow-Origin", "*");
             headers.add("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
             headers.add("Access-Control-Allow-Headers", "*");
             headers.add("Access-Control-Expose-Headers", "Content-Type, Content-Length, Content-Disposition");
 
-            // 🔥 设置缓存策略
+            // 设置缓存策略
             headers.setCacheControl("public, max-age=3600"); // 缓存1小时
 
-            // 🔥 设置为inline显示
+            // 设置为inline显示
             headers.add("Content-Disposition", "inline; filename=\"" + filename + "\"");
 
             logger.info("返回批量结果文件，Content-Type: " + contentType + ", Size: " + fileData.length);
@@ -314,6 +314,65 @@ public class VisualsLabelingController {
         } catch (Exception e) {
             logger.error("获取批量结果文件失败: " + filename, e);
             return new ResponseEntity<>(HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    /**
+     * 从FastAPI结果目录获取文件
+     */
+    private byte[] getFileFromFastApiResultDir(String filename) {
+        try {
+            logger.info("从FastAPI结果目录获取文件: " + filename);
+
+            // FastAPI的结果目录路径
+            String tempDir = System.getProperty("java.io.tmpdir");
+            String resultDir = tempDir + File.separator + "yolo_api_results";
+
+            logger.info("搜索目录: " + resultDir);
+
+            File resultDirFile = new File(resultDir);
+            if (!resultDirFile.exists()) {
+                logger.warn("FastAPI结果目录不存在: " + resultDir);
+                return null;
+            }
+
+            // 1. 首先在主结果目录中查找
+            File mainFile = new File(resultDir, filename);
+            if (mainFile.exists()) {
+                logger.info("在主结果目录找到文件: " + mainFile.getAbsolutePath());
+                return java.nio.file.Files.readAllBytes(mainFile.toPath());
+            }
+
+            // 2. 在所有batch_xxx子目录中查找
+            File[] batchFolders = resultDirFile.listFiles((dir, name) ->
+                    name.startsWith("batch_") && new File(dir, name).isDirectory()
+            );
+
+            if (batchFolders != null) {
+                logger.info("找到 " + batchFolders.length + " 个batch文件夹");
+
+                // 按修改时间倒序排列，优先查找最新的batch文件夹
+                java.util.Arrays.sort(batchFolders, (a, b) ->
+                        Long.compare(b.lastModified(), a.lastModified())
+                );
+
+                for (File folder : batchFolders) {
+                    File targetFile = new File(folder, filename);
+                    logger.info("检查文件: " + targetFile.getAbsolutePath());
+
+                    if (targetFile.exists()) {
+                        logger.info("在batch目录找到文件: " + targetFile.getAbsolutePath());
+                        return java.nio.file.Files.readAllBytes(targetFile.toPath());
+                    }
+                }
+            }
+
+            logger.warn("在FastAPI结果目录及其子目录中未找到文件: " + filename);
+            return null;
+
+        } catch (Exception e) {
+            logger.error("从FastAPI结果目录获取文件失败: " + e.getMessage(), e);
+            return null;
         }
     }
 

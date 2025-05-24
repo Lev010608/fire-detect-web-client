@@ -38,6 +38,24 @@
       <el-button class="file-btn" type="primary" size="large" @click="showBatchDialog" :loading="batchLoading">
         {{ batchLoading ? '处理中...' : '批量图片检测' }}
       </el-button>
+
+      <!-- 实时视频流检测按钮 -->
+      <el-upload
+          class="upload-demo"
+          :action="''"
+          :auto-upload="false"
+          :on-change="handleStreamVideoSelect"
+          :show-file-list="false"
+          accept="video/*">
+        <el-button class="file-btn" type="success" size="large" :loading="streamVideoLoading">
+          {{ streamVideoLoading ? '处理中...' : '实时视频流检测' }}
+        </el-button>
+      </el-upload>
+
+      <!-- 摄像头实时检测按钮 -->
+      <el-button class="file-btn" type="warning" size="large" @click="showCameraDialog" :loading="cameraLoading">
+        {{ cameraLoading ? '启动中...' : '摄像头实时检测' }}
+      </el-button>
     </div>
 
     <!-- 检测结果展示区域 -->
@@ -280,6 +298,203 @@
       </div>
     </div>
 
+    <!-- 实时视频流处理区域 -->
+    <div class="stream-processing" v-if="streamProcessing.show">
+      <el-card class="stream-card">
+        <div slot="header" class="stream-header">
+          <span>实时视频流检测</span>
+          <el-button type="danger" size="small" @click="stopStreamProcessing">停止处理</el-button>
+        </div>
+
+        <!-- 实时流统计信息 -->
+        <div class="stream-stats">
+          <el-row :gutter="20">
+            <el-col :span="6">
+              <el-card shadow="never">
+                <div class="stat-item">
+                  <div class="stat-label">处理进度</div>
+                  <div class="stat-value">{{ streamProcessing.progress.current }}/{{ streamProcessing.progress.total }}</div>
+                </div>
+              </el-card>
+            </el-col>
+            <el-col :span="6">
+              <el-card shadow="never">
+                <div class="stat-item">
+                  <div class="stat-label">检测总数</div>
+                  <div class="stat-value">{{ streamProcessing.totalDetections }}</div>
+                </div>
+              </el-card>
+            </el-col>
+            <el-col :span="6">
+              <el-card shadow="never">
+                <div class="stat-item">
+                  <div class="stat-label">处理时长</div>
+                  <div class="stat-value">{{ formatDuration(streamProcessing.duration) }}</div>
+                </div>
+              </el-card>
+            </el-col>
+            <el-col :span="6">
+              <el-card shadow="never">
+                <div class="stat-item">
+                  <div class="stat-label">状态</div>
+                  <div class="stat-value">
+                    <el-tag :type="getStreamStatusType(streamProcessing.status)">
+                      {{ getStreamStatusText(streamProcessing.status) }}
+                    </el-tag>
+                  </div>
+                </div>
+              </el-card>
+            </el-col>
+          </el-row>
+        </div>
+
+        <!-- 进度条 -->
+        <div class="stream-progress">
+          <el-progress
+              :percentage="streamProcessing.progress.percent"
+              :stroke-width="15"
+              :text-inside="true"
+              status="success">
+          </el-progress>
+        </div>
+
+        <!-- 实时检测结果显示 -->
+        <div class="stream-result" v-if="streamProcessing.currentFrame">
+          <h4>当前帧检测结果</h4>
+          <div class="frame-info">
+            <p><strong>帧号：</strong>{{ streamProcessing.currentFrame.frameId }}</p>
+            <p><strong>检测数量：</strong>{{ streamProcessing.currentFrame.detectionCount }}</p>
+            <p><strong>推理时间：</strong>{{ streamProcessing.currentFrame.inferenceTime }}</p>
+          </div>
+
+          <!-- 当前帧检测结果图片 -->
+          <div class="frame-display" v-if="streamProcessing.currentFrame.annotatedFrame">
+            <img :src="'data:image/jpeg;base64,' + streamProcessing.currentFrame.annotatedFrame"
+                 alt="当前帧检测结果" style="max-width: 500px; max-height: 300px;" />
+          </div>
+        </div>
+      </el-card>
+    </div>
+
+    <!-- 🔥 新增：摄像头检测区域 -->
+    <div class="camera-detection" v-if="cameraDetection.show">
+      <el-card class="camera-card">
+        <div slot="header" class="camera-header">
+          <span>摄像头实时检测</span>
+          <div class="camera-controls">
+            <el-button type="success" size="small" @click="startCamera" :disabled="cameraDetection.active">启动摄像头</el-button>
+            <el-button type="danger" size="small" @click="stopCamera" :disabled="!cameraDetection.active">停止摄像头</el-button>
+            <el-button type="info" size="small" @click="closeCameraDetection">关闭检测</el-button>
+          </div>
+        </div>
+
+        <!-- 摄像头参数控制 -->
+        <div class="camera-params">
+          <el-row :gutter="20">
+            <el-col :span="6">
+              <div class="param-item">
+                <label>帧率控制:</label>
+                <el-select v-model="cameraParams.fps" size="small" @change="updateCameraParams">
+                  <el-option label="5 FPS" :value="5"></el-option>
+                  <el-option label="10 FPS" :value="10"></el-option>
+                  <el-option label="15 FPS" :value="15"></el-option>
+                  <el-option label="20 FPS" :value="20"></el-option>
+                  <el-option label="25 FPS" :value="25"></el-option>
+                  <el-option label="30 FPS" :value="30"></el-option>
+                </el-select>
+              </div>
+            </el-col>
+            <el-col :span="6">
+              <div class="param-item">
+                <label>图像质量:</label>
+                <el-select v-model="cameraParams.quality" size="small" @change="updateCameraParams">
+                  <el-option label="低质量(流畅)" :value="0.3"></el-option>
+                  <el-option label="中等质量" :value="0.5"></el-option>
+                  <el-option label="高质量" :value="0.7"></el-option>
+                  <el-option label="最高质量" :value="0.9"></el-option>
+                </el-select>
+              </div>
+            </el-col>
+            <el-col :span="6">
+              <div class="param-item">
+                <label>智能跳帧:</label>
+                <el-switch v-model="cameraParams.skipFrames" @change="updateCameraParams"></el-switch>
+              </div>
+            </el-col>
+            <el-col :span="6">
+              <div class="param-item">
+                <label>保存结果:</label>
+                <el-switch v-model="cameraParams.saveResult"></el-switch>
+              </div>
+            </el-col>
+          </el-row>
+        </div>
+
+        <!-- 摄像头视频流显示 -->
+        <div class="camera-streams">
+          <el-row :gutter="20">
+            <el-col :span="12">
+              <div class="stream-container">
+                <h4>原始视频流</h4>
+                <video
+                    ref="cameraVideo"
+                    autoplay
+                    muted
+                    style="width: 100%; max-height: 300px; border: 1px solid #ddd;">
+                </video>
+                <canvas ref="cameraCanvas" style="display: none;"></canvas>
+              </div>
+            </el-col>
+            <el-col :span="12">
+              <div class="stream-container">
+                <h4>检测结果</h4>
+                <div class="result-display">
+                  <img v-if="cameraDetection.lastResult"
+                       :src="cameraDetection.lastResult"
+                       alt="检测结果"
+                       style="width: 100%; max-height: 300px; border: 1px solid #ddd;" />
+                  <div v-else class="no-result">
+                    <i class="el-icon-camera"></i>
+                    <p>等待检测结果...</p>
+                  </div>
+                </div>
+              </div>
+            </el-col>
+          </el-row>
+        </div>
+
+        <!-- 摄像头检测统计 -->
+        <div class="camera-stats">
+          <el-row :gutter="20">
+            <el-col :span="6">
+              <div class="stat-item">
+                <div class="stat-label">检测总数</div>
+                <div class="stat-value">{{ cameraDetection.totalDetections }}</div>
+              </div>
+            </el-col>
+            <el-col :span="6">
+              <div class="stat-item">
+                <div class="stat-label">处理帧数</div>
+                <div class="stat-value">{{ cameraDetection.processedFrames }}</div>
+              </div>
+            </el-col>
+            <el-col :span="6">
+              <div class="stat-item">
+                <div class="stat-label">实际FPS</div>
+                <div class="stat-value">{{ cameraDetection.actualFps }}</div>
+              </div>
+            </el-col>
+            <el-col :span="6">
+              <div class="stat-item">
+                <div class="stat-label">检测时长</div>
+                <div class="stat-value">{{ formatDuration(cameraDetection.duration) }}</div>
+              </div>
+            </el-col>
+          </el-row>
+        </div>
+      </el-card>
+    </div>
+
     <!-- 批量检测对话框 -->
     <el-dialog title="批量图片检测" :visible.sync="batchDialogVisible" width="50%">
       <el-form :model="batchForm" label-width="120px">
@@ -344,6 +559,46 @@
         <el-button @click="imageViewVisible = false">关 闭</el-button>
       </span>
     </el-dialog>
+
+    <!-- 新增：摄像头检测参数对话框 -->
+    <el-dialog title="摄像头检测设置" :visible.sync="cameraDialogVisible" width="40%">
+      <el-form :model="cameraParams" label-width="120px">
+        <el-form-item label="帧率控制">
+          <el-select v-model="cameraParams.fps" style="width: 100%">
+            <el-option label="5 FPS (省资源)" :value="5"></el-option>
+            <el-option label="10 FPS (流畅)" :value="10"></el-option>
+            <el-option label="15 FPS (推荐)" :value="15"></el-option>
+            <el-option label="20 FPS (高帧率)" :value="20"></el-option>
+            <el-option label="25 FPS (很高)" :value="25"></el-option>
+            <el-option label="30 FPS (最高)" :value="30"></el-option>
+          </el-select>
+        </el-form-item>
+        <el-form-item label="图像质量">
+          <el-select v-model="cameraParams.quality" style="width: 100%">
+            <el-option label="低质量 (更流畅)" :value="0.3"></el-option>
+            <el-option label="中等质量 (推荐)" :value="0.5"></el-option>
+            <el-option label="高质量" :value="0.7"></el-option>
+            <el-option label="最高质量 (更清晰)" :value="0.9"></el-option>
+          </el-select>
+        </el-form-item>
+        <el-form-item label="智能跳帧">
+          <el-switch v-model="cameraParams.skipFrames"></el-switch>
+          <div style="color: #909399; font-size: 12px; margin-top: 5px;">
+            开启后将在处理队列过长时自动跳过部分帧，提高流畅度
+          </div>
+        </el-form-item>
+        <el-form-item label="自动保存">
+          <el-switch v-model="cameraParams.saveResult"></el-switch>
+          <div style="color: #909399; font-size: 12px; margin-top: 5px;">
+            检测时长超过5秒时自动保存结果到数据库
+          </div>
+        </el-form-item>
+      </el-form>
+      <span slot="footer" class="dialog-footer">
+        <el-button @click="cameraDialogVisible = false">取 消</el-button>
+        <el-button type="primary" @click="startCameraDetection">开始检测</el-button>
+      </span>
+    </el-dialog>
   </div>
 </template>
 
@@ -390,7 +645,56 @@ export default {
 
       // 图片查看
       imageViewVisible: false,
-      currentViewImage: null
+      currentViewImage: null,
+
+      // 实时视频流处理
+      streamVideoLoading: false,
+      streamProcessing: {
+        show: false,
+        sessionId: null,
+        status: 'idle', // idle, processing, completed, failed
+        progress: {
+          current: 0,
+          total: 0,
+          percent: 0
+        },
+        totalDetections: 0,
+        duration: 0,
+        startTime: null,
+        currentFrame: null
+      },
+
+      // 摄像头检测
+      cameraLoading: false,
+      cameraDialogVisible: false,
+      cameraDetection: {
+        show: false,
+        active: false,
+        sessionId: null,
+        totalDetections: 0,
+        processedFrames: 0,
+        actualFps: 0,
+        duration: 0,
+        startTime: null,
+        lastResult: null
+      },
+
+      // 摄像头参数
+      cameraParams: {
+        fps: 15,
+        quality: 0.5,
+        skipFrames: true,
+        saveResult: true
+      },
+
+      // WebSocket连接
+      websocket: null,
+
+      // 摄像头相关
+      cameraStream: null,
+      processingInterval: null,
+      fpsCounter: 0,
+      fpsStartTime: Date.now()
     }
   },
   computed: {
@@ -686,6 +990,438 @@ export default {
     viewBatchImage(imageData) {
       this.currentViewImage = imageData
       this.imageViewVisible = true
+    },
+
+    //实时视频流处理方法
+    async handleStreamVideoSelect(file, fileList) {
+      if (!file.raw) return
+
+      this.streamVideoLoading = true
+      this.resetStreamProcessing()
+
+      try {
+        console.log('开始上传视频文件:', file.raw.name, '大小:', file.raw.size)
+
+        // 检查文件大小（可选）
+        if (file.raw.size > 100 * 1024 * 1024) { // 100MB
+          this.$message.error('视频文件不能超过100MB')
+          return
+        }
+
+        const formData = new FormData()
+        formData.append('file', file.raw)
+
+        //正确的headers设置
+        const headers = {
+          'token': this.uploadHeaders.token
+        }
+
+        console.log('发送请求到:', '/realtime/upload-stream')
+        console.log('请求头:', headers)
+
+        const response = await this.$request.post('/realtime/upload-stream', formData, {
+          headers: headers,
+          timeout: 30000 // 30秒超时
+        })
+
+        console.log('上传响应:', response)
+
+        if (response.code === '200') {
+          this.streamProcessing.sessionId = response.data.sessionId
+          this.streamProcessing.show = true
+
+          // 建立WebSocket连接
+          await this.connectWebSocket(response.data.sessionId)
+
+          // 开始流处理
+          await this.startStreamProcessing(response.data.videoPath)
+
+          this.$message.success('开始实时视频流检测')
+        } else {
+          this.$message.error(response.msg || '视频上传失败')
+        }
+      } catch (error) {
+        console.error('实时视频流处理失败:', error)
+
+        // 更详细的错误处理
+        let errorMessage = '实时视频流处理失败'
+        if (error.response) {
+          errorMessage += ': ' + (error.response.data?.msg || error.response.statusText)
+        } else if (error.message) {
+          errorMessage += ': ' + error.message
+        }
+
+        this.$message.error(errorMessage)
+      } finally {
+        this.streamVideoLoading = false
+      }
+    },
+
+    async startStreamProcessing(videoPath) {
+      try {
+        const response = await this.$request.post('/realtime/start-stream', {
+          sessionId: this.streamProcessing.sessionId,
+          videoPath: videoPath,
+          saveOutput: true
+        })
+
+        if (response.code === '200') {
+          this.streamProcessing.status = 'processing'
+          this.streamProcessing.startTime = new Date()
+          this.startDurationTimer()
+        }
+      } catch (error) {
+        console.error('启动流处理失败:', error)
+        this.$message.error('启动流处理失败')
+      }
+    },
+
+    async stopStreamProcessing() {
+      try {
+        if (this.streamProcessing.sessionId) {
+          await this.$request.post('/realtime/stop-stream', {
+            sessionId: this.streamProcessing.sessionId
+          })
+
+          this.streamProcessing.status = 'completed'
+          this.closeWebSocket()
+          this.$message.success('视频流处理已停止，结果已保存')
+        }
+      } catch (error) {
+        console.error('停止流处理失败:', error)
+        this.$message.error('停止流处理失败')
+      }
+    },
+
+    resetStreamProcessing() {
+      this.streamProcessing = {
+        show: false,
+        sessionId: null,
+        status: 'idle',
+        progress: { current: 0, total: 0, percent: 0 },
+        totalDetections: 0,
+        duration: 0,
+        startTime: null,
+        currentFrame: null
+      }
+    },
+
+    // 🔥 新增：摄像头检测方法
+    showCameraDialog() {
+      this.cameraDialogVisible = true
+    },
+
+    async startCameraDetection() {
+      this.cameraDialogVisible = false
+      this.cameraLoading = true
+
+      try {
+        // 生成会话ID
+        const sessionId = 'camera_' + Date.now()
+        this.cameraDetection.sessionId = sessionId
+        this.cameraDetection.show = true
+
+        // 建立WebSocket连接
+        await this.connectWebSocket(sessionId)
+
+        // 启动摄像头检测会话
+        const response = await this.$request.post('/realtime/start-camera', {
+          sessionId: sessionId,
+          fps: this.cameraParams.fps,
+          quality: this.cameraParams.quality,
+          skipFrames: this.cameraParams.skipFrames
+        })
+
+        if (response.code === '200') {
+          this.$message.success('摄像头检测会话已启动')
+        }
+      } catch (error) {
+        console.error('启动摄像头检测失败:', error)
+        this.$message.error('启动摄像头检测失败')
+      } finally {
+        this.cameraLoading = false
+      }
+    },
+
+    async startCamera() {
+      try {
+        console.log('正在请求摄像头权限...')
+        this.cameraStream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            width: { ideal: 640 },
+            height: { ideal: 480 },
+            frameRate: { ideal: 30 }
+          }
+        })
+
+        this.$refs.cameraVideo.srcObject = this.cameraStream
+        console.log('摄像头启动成功')
+
+        this.$refs.cameraVideo.onloadedmetadata = () => {
+          this.$refs.cameraCanvas.width = this.$refs.cameraVideo.videoWidth
+          this.$refs.cameraCanvas.height = this.$refs.cameraVideo.videoHeight
+          this.startCameraProcessing()
+        }
+
+        this.cameraDetection.active = true
+        this.cameraDetection.startTime = new Date()
+        this.startDurationTimer()
+
+      } catch (error) {
+        console.error('摄像头启动失败:', error)
+        this.$message.error('摄像头启动失败：' + error.message)
+      }
+    },
+
+    startCameraProcessing() {
+      if (!this.cameraStream || !this.cameraDetection.active) return
+
+      this.fpsCounter = 0
+      this.fpsStartTime = Date.now()
+
+      const targetFps = this.cameraParams.fps
+      const interval = 1000 / targetFps
+
+      this.processingInterval = setInterval(() => {
+        if (!this.cameraDetection.active || !this.$refs.cameraVideo.videoWidth) {
+          return
+        }
+
+        // 捕获当前帧
+        const context = this.$refs.cameraCanvas.getContext('2d')
+        context.drawImage(this.$refs.cameraVideo, 0, 0, this.$refs.cameraCanvas.width, this.$refs.cameraCanvas.height)
+
+        // 获取图像数据
+        const frameData = this.$refs.cameraCanvas.toDataURL('image/jpeg', this.cameraParams.quality)
+
+        // 发送到后端进行检测
+        this.processCameraFrame(frameData)
+
+      }, interval)
+
+      console.log('摄像头处理已启动，目标帧率:', targetFps, 'FPS')
+    },
+
+    async processCameraFrame(frameData) {
+      try {
+        // 通过API直接处理单帧
+        const response = await this.$request.post('/visuals/detect_frame_base64', {
+          image: frameData,
+          options: {
+            return_annotated: true,
+            image_quality: this.cameraParams.quality
+          }
+        })
+
+        if (response.code === '200' && response.data.success) {
+          // 更新检测结果
+          this.cameraDetection.lastResult = response.data.annotated_image
+          this.cameraDetection.totalDetections += response.data.detection_count
+          this.cameraDetection.processedFrames++
+
+          // 更新FPS
+          this.updateFpsDisplay()
+        }
+      } catch (error) {
+        console.error('处理摄像头帧失败:', error)
+      }
+    },
+
+    updateFpsDisplay() {
+      this.fpsCounter++
+      const now = Date.now()
+      if (now - this.fpsStartTime >= 1000) {
+        const actualFps = this.fpsCounter / ((now - this.fpsStartTime) / 1000)
+        this.cameraDetection.actualFps = actualFps.toFixed(1)
+        this.fpsCounter = 0
+        this.fpsStartTime = now
+      }
+    },
+
+    async stopCamera() {
+      try {
+        // 停止处理
+        if (this.processingInterval) {
+          clearInterval(this.processingInterval)
+          this.processingInterval = null
+        }
+
+        // 停止摄像头流
+        if (this.cameraStream) {
+          this.cameraStream.getTracks().forEach(track => track.stop())
+          this.cameraStream = null
+          this.$refs.cameraVideo.srcObject = null
+        }
+
+        this.cameraDetection.active = false
+
+        // 停止摄像头检测会话
+        if (this.cameraDetection.sessionId) {
+          await this.$request.post('/realtime/stop-camera', {
+            sessionId: this.cameraDetection.sessionId,
+            saveResult: this.cameraParams.saveResult
+          })
+        }
+
+        console.log('摄像头已停止')
+        this.$message.success('摄像头检测已停止')
+
+      } catch (error) {
+        console.error('停止摄像头失败:', error)
+        this.$message.error('停止摄像头失败')
+      }
+    },
+
+    closeCameraDetection() {
+      this.stopCamera()
+      this.cameraDetection.show = false
+      this.closeWebSocket()
+    },
+
+    updateCameraParams() {
+      if (this.cameraDetection.active) {
+        // 重新启动处理以应用新参数
+        if (this.processingInterval) {
+          clearInterval(this.processingInterval)
+        }
+        this.startCameraProcessing()
+      }
+    },
+
+    // 🔥 WebSocket连接管理
+    async connectWebSocket(sessionId) {
+      return new Promise((resolve, reject) => {
+        try {
+          const wsUrl = `ws://localhost:9090/ws/realtime/${sessionId}`
+          this.websocket = new WebSocket(wsUrl)
+
+          this.websocket.onopen = () => {
+            console.log('WebSocket连接已建立:', sessionId)
+            resolve()
+          }
+
+          this.websocket.onmessage = (event) => {
+            this.handleWebSocketMessage(JSON.parse(event.data))
+          }
+
+          this.websocket.onclose = () => {
+            console.log('WebSocket连接已关闭')
+          }
+
+          this.websocket.onerror = (error) => {
+            console.error('WebSocket连接错误:', error)
+            reject(error)
+          }
+        } catch (error) {
+          reject(error)
+        }
+      })
+    },
+
+    closeWebSocket() {
+      if (this.websocket) {
+        this.websocket.close()
+        this.websocket = null
+      }
+    },
+
+    handleWebSocketMessage(message) {
+      console.log('收到WebSocket消息:', message)
+
+      switch (message.type) {
+        case 'progress_update':
+          if (message.data) {
+            this.streamProcessing.progress = message.data
+          }
+          break
+
+        case 'detection_result':
+          if (message.data) {
+            this.handleRealtimeDetectionResult(message.data)
+          }
+          break
+
+        case 'connection_established':
+          console.log('WebSocket连接确认:', message.message)
+          break
+
+        default:
+          console.log('未处理的消息类型:', message.type)
+      }
+    },
+
+    handleRealtimeDetectionResult(data) {
+      if (data.type === 'frame_result') {
+        // 视频流帧结果
+        this.streamProcessing.currentFrame = {
+          frameId: data.frame_id,
+          detectionCount: data.detection_count,
+          inferenceTime: data.inference_time,
+          annotatedFrame: data.annotated_frame
+        }
+        this.streamProcessing.totalDetections += data.detection_count || 0
+
+        if (data.progress) {
+          this.streamProcessing.progress = data.progress
+        }
+      }
+    },
+
+    // 工具方法
+    formatDuration(milliseconds) {
+      if (!milliseconds) return '0s'
+      const seconds = Math.floor(milliseconds / 1000)
+      const minutes = Math.floor(seconds / 60)
+      const hours = Math.floor(minutes / 60)
+
+      if (hours > 0) {
+        return `${hours}h ${minutes % 60}m ${seconds % 60}s`
+      } else if (minutes > 0) {
+        return `${minutes}m ${seconds % 60}s`
+      } else {
+        return `${seconds}s`
+      }
+    },
+
+    startDurationTimer() {
+      setInterval(() => {
+        if (this.streamProcessing.startTime && this.streamProcessing.status === 'processing') {
+          this.streamProcessing.duration = Date.now() - this.streamProcessing.startTime.getTime()
+        }
+        if (this.cameraDetection.startTime && this.cameraDetection.active) {
+          this.cameraDetection.duration = Date.now() - this.cameraDetection.startTime.getTime()
+        }
+      }, 1000)
+    },
+
+    getStreamStatusType(status) {
+      switch (status) {
+        case 'processing': return 'warning'
+        case 'completed': return 'success'
+        case 'failed': return 'danger'
+        default: return 'info'
+      }
+    },
+
+    getStreamStatusText(status) {
+      switch (status) {
+        case 'idle': return '待机'
+        case 'processing': return '处理中'
+        case 'completed': return '已完成'
+        case 'failed': return '失败'
+        default: return '未知'
+      }
+    },
+
+  },
+  // 生命周期方法
+  beforeDestroy() {
+    // 清理资源
+    this.stopCamera()
+    this.closeWebSocket()
+
+    if (this.processingInterval) {
+      clearInterval(this.processingInterval)
     }
   }
 }
@@ -721,6 +1457,120 @@ export default {
   height: 50px;
   font-size: 16px;
 }
+
+/* 🔥 新增样式：实时处理相关 */
+.stream-processing, .camera-detection {
+  margin-bottom: 30px;
+}
+
+.stream-card, .camera-card {
+  margin-bottom: 20px;
+}
+
+.stream-header, .camera-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.stream-stats, .camera-stats {
+  margin: 20px 0;
+}
+
+.stat-item {
+  text-align: center;
+  padding: 15px;
+}
+
+.stat-label {
+  font-size: 14px;
+  color: #909399;
+  margin-bottom: 8px;
+}
+
+.stat-value {
+  font-size: 24px;
+  font-weight: bold;
+  color: #303133;
+}
+
+.stream-progress {
+  margin: 20px 0;
+}
+
+.stream-result {
+  margin-top: 20px;
+}
+
+.frame-info {
+  background-color: #f5f7fa;
+  padding: 15px;
+  border-radius: 4px;
+  margin: 15px 0;
+}
+
+.frame-display {
+  text-align: center;
+  margin-top: 15px;
+}
+
+.camera-controls {
+  display: flex;
+  gap: 10px;
+}
+
+.camera-params {
+  margin: 20px 0;
+  padding: 20px;
+  background-color: #f5f7fa;
+  border-radius: 8px;
+}
+
+.param-item {
+  text-align: center;
+}
+
+.param-item label {
+  display: block;
+  margin-bottom: 8px;
+  font-weight: 500;
+  color: #606266;
+}
+
+.camera-streams {
+  margin: 20px 0;
+}
+
+.stream-container {
+  text-align: center;
+}
+
+.stream-container h4 {
+  margin-bottom: 15px;
+  color: #303133;
+}
+
+.result-display {
+  height: 300px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #fafafa;
+}
+
+.no-result {
+  text-align: center;
+  color: #909399;
+}
+
+.no-result i {
+  font-size: 48px;
+  margin-bottom: 10px;
+}
+
+
 
 .detection-result {
   background-color: #ffffff;
@@ -834,4 +1684,16 @@ export default {
 /deep/ .el-pagination {
   text-align: center;
 }
+/* 响应式设计 */
+@media (max-width: 768px) {
+  .file-btn {
+    width: 150px;
+    margin: 5px;
+  }
+
+  .camera-streams .el-col {
+    margin-bottom: 20px;
+  }
+}
+
 </style>

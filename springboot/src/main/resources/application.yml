@@ -10,8 +10,10 @@ spring:
     url: jdbc:mysql://39.106.21.164:3306/fire_detect_manager?useUnicode=true&characterEncoding=utf-8&allowMultiQueries=true&useSSL=false&serverTimezone=GMT%2b8&allowPublicKeyRetrieval=true
   servlet:
     multipart:
+      enabled: true
       max-file-size: 100MB
       max-request-size: 100MB
+      file-size-threshold: 2KB
 
 # 配置mybatis实体和xml映射
 mybatis:

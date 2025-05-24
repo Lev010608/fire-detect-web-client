@@ -1,3 +1,4 @@
+// springboot/src/main/java/com/example/common/config/CorsConfig.java
 package com.example.common.config;
 
 import org.springframework.context.annotation.Bean;
@@ -37,11 +38,24 @@ public class CorsConfig {
         mediaConfig.addExposedHeader("Accept-Ranges");
         mediaConfig.addExposedHeader("Cache-Control");
 
+        // 🔥 新增：WebSocket特殊配置
+        CorsConfiguration webSocketConfig = new CorsConfiguration();
+        webSocketConfig.addAllowedOriginPattern("*");
+        webSocketConfig.setAllowCredentials(true);
+        webSocketConfig.addAllowedMethod("*");
+        webSocketConfig.addAllowedHeader("*");
+        webSocketConfig.addExposedHeader("*");
+
         // 对不同路径应用不同配置
         source.registerCorsConfiguration("/visuals/result/**", mediaConfig);  // 媒体文件
         source.registerCorsConfiguration("/visuals/batch/**", mediaConfig);   // 批量结果文件
         source.registerCorsConfiguration("/files/**", mediaConfig);           // 普通文件
-        source.registerCorsConfiguration("/**", generalConfig);               // 其他接口
+
+        // 🔥 新增：实时检测相关端点的CORS配置
+        source.registerCorsConfiguration("/realtime/**", generalConfig);
+        source.registerCorsConfiguration("/ws/**", webSocketConfig);
+
+        source.registerCorsConfiguration("/**", generalConfig);               // 其他接口（放在最后）
 
         return new CorsFilter(source);
     }

@@ -34,8 +34,13 @@ public class JwtInterceptor implements HandlerInterceptor {
     @Resource
     private UserService userService;
 
+
+
     @Override
-    public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) {
+    public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) throws Exception {
+
+        String url = request.getRequestURI();
+        System.out.println("请求路径：" + url);
         // 1. 从http请求的header中获取token
         String token = request.getHeader(Constants.TOKEN);
         if (ObjectUtil.isEmpty(token)) {

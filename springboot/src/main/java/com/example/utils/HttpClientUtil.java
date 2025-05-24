@@ -2,6 +2,8 @@
 package com.example.utils;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.http.*;
 import org.springframework.web.client.RestTemplate;
@@ -9,6 +11,7 @@ import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
 
+import java.io.File;
 import java.util.Map;
 import java.util.HashMap;
 
@@ -20,6 +23,8 @@ public class HttpClientUtil {
     private static final String FASTAPI_BASE_URL = "http://localhost:8000";
     private static final RestTemplate restTemplate = new RestTemplate();
     private static final ObjectMapper objectMapper = new ObjectMapper();
+
+    private static final Logger logger = LoggerFactory.getLogger(HttpClientUtil.class);
 
     /**
      * 发送文件到FastAPI检测接口
@@ -204,6 +209,129 @@ public class HttpClientUtil {
             return response.getBody();
         } catch (HttpClientErrorException e) {
             throw new Exception("POST请求失败：" + e.getResponseBodyAsString());
+        }
+    }
+
+    /**
+     * 单帧图像检测 - Base64格式
+     */
+    public static Map<String, Object> detectFrameBase64(String imageBase64, Map<String, Object> options) throws Exception {
+        String url = FASTAPI_BASE_URL + "/detect_frame_base64";
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+
+        Map<String, Object> requestBody = new HashMap<>();
+        requestBody.put("image", imageBase64);
+        requestBody.put("options", options != null ? options : new HashMap<>());
+
+        String jsonData = objectMapper.writeValueAsString(requestBody);
+        HttpEntity<String> entity = new HttpEntity<>(jsonData, headers);
+
+        try {
+            ResponseEntity<Map> response = restTemplate.exchange(url, HttpMethod.POST, entity, Map.class);
+            return response.getBody();
+        } catch (HttpClientErrorException e) {
+            throw new Exception("FastAPI单帧检测失败：" + e.getResponseBodyAsString());
+        }
+    }
+
+    /**
+     * 单帧图像检测 - 文件上传格式
+     */
+    public static Map<String, Object> detectFrame(MultipartFile file) throws Exception {
+        String url = FASTAPI_BASE_URL + "/detect_frame";
+        return uploadFile(url, file);
+    }
+
+    /**
+     * 上传视频用于WebSocket流式处理
+     */
+    public static Map<String, Object> uploadVideoForWebSocketStream(MultipartFile file) throws Exception {
+        String url = FASTAPI_BASE_URL + "/stream_video";
+        return uploadFile(url, file);
+    }
+
+    /**
+     * 检查FastAPI WebSocket服务状态
+     */
+    public static Map<String, Object> checkWebSocketHealth() throws Exception {
+        String url = FASTAPI_BASE_URL + "/api/status";
+
+        try {
+            ResponseEntity<Map> response = restTemplate.getForEntity(url, Map.class);
+            return response.getBody();
+        } catch (HttpClientErrorException e) {
+            throw new Exception("FastAPI WebSocket健康检查失败：" + e.getMessage());
+        }
+    }
+
+    /**
+     * 获取FastAPI API信息
+     */
+    public static Map<String, Object> getApiInfo() throws Exception {
+        String url = FASTAPI_BASE_URL + "/api/info";
+
+        try {
+            ResponseEntity<Map> response = restTemplate.getForEntity(url, Map.class);
+            return response.getBody();
+        } catch (HttpClientErrorException e) {
+            throw new Exception("获取FastAPI API信息失败：" + e.getMessage());
+        }
+    }
+
+    /**
+     * 测试FastAPI连接
+     */
+    public static boolean testFastApiConnection() {
+        try {
+            String url = FASTAPI_BASE_URL + "/health";
+            ResponseEntity<Map> response = restTemplate.getForEntity(url, Map.class);
+            return response.getStatusCode() == HttpStatus.OK;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    /**
+     * 测试FastAPI WebSocket连接
+     */
+    public static boolean testFastApiWebSocketConnection() {
+        try {
+            String url = FASTAPI_BASE_URL + "/api/status";
+            ResponseEntity<Map> response = restTemplate.getForEntity(url, Map.class);
+            Map<String, Object> data = response.getBody();
+            return data != null && "running".equals(data.get("status"));
+        } catch (Exception e) {
+            return false;
+        }
+    }
+    /**
+     * 检测视频文件 - 用于实时流处理
+     */
+    public static Map<String, Object> detectVideoFile(String videoPath) throws Exception {
+        String url = FASTAPI_BASE_URL + "/detect";
+
+        try {
+            // 创建MultipartFile
+            File videoFile = new File(videoPath);
+            if (!videoFile.exists()) {
+                throw new Exception("视频文件不存在: " + videoPath);
+            }
+
+            // 使用自定义的MultipartFile实现
+            MultipartFile multipartFile = new org.springframework.mock.web.MockMultipartFile(
+                    "file",
+                    videoFile.getName(),
+                    "video/mp4",
+                    java.nio.file.Files.readAllBytes(videoFile.toPath())
+            );
+
+            return uploadFile(url, multipartFile);
+
+        } catch (Exception e) {
+            logger.error("检测视频文件失败: " + videoPath, e);
+            throw new Exception("检测视频文件失败: " + e.getMessage());
         }
     }
 }
