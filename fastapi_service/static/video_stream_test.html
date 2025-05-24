@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>YOLOv10 Video Stream Test</title>
+    <title>YOLOv10 Fire Detection Test</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -15,28 +15,45 @@
             color: #333;
         }
         .container {
-            max-width: 1200px;
+            max-width: 1400px;
             margin: 0 auto;
             background-color: white;
             padding: 20px;
             border-radius: 5px;
             box-shadow: 0 0 10px rgba(0,0,0,0.1);
         }
-        .video-container {
-            margin-top: 20px;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-        }
-        #video-display {
-            max-width: 100%;
+        .section {
+            margin-bottom: 30px;
+            padding: 20px;
             border: 1px solid #ddd;
-            margin-bottom: 10px;
+            border-radius: 5px;
+        }
+        .section h2 {
+            margin-top: 0;
+            color: #333;
+            border-bottom: 2px solid #4CAF50;
+            padding-bottom: 10px;
+        }
+        .video-container {
+            display: flex;
+            gap: 20px;
+            margin-top: 20px;
+        }
+        .video-display {
+            flex: 1;
+            text-align: center;
+        }
+        .video-display video, .video-display img {
+            max-width: 100%;
+            max-height: 400px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
         }
         .controls {
             display: flex;
             gap: 10px;
-            margin-bottom: 20px;
+            margin: 15px 0;
+            flex-wrap: wrap;
         }
         button {
             padding: 8px 16px;
@@ -45,6 +62,7 @@
             border: none;
             border-radius: 4px;
             cursor: pointer;
+            font-size: 14px;
         }
         button:hover {
             background-color: #45a049;
@@ -53,8 +71,14 @@
             background-color: #cccccc;
             cursor: not-allowed;
         }
-        .upload-section {
-            margin-bottom: 20px;
+        .camera-controls {
+            background-color: #e8f5e8;
+        }
+        .video-controls {
+            background-color: #e8f0ff;
+        }
+        .upload-section input[type="file"] {
+            margin-right: 10px;
         }
         .log-section {
             margin-top: 20px;
@@ -67,10 +91,11 @@
             padding: 10px;
             background-color: #f9f9f9;
             font-family: monospace;
+            font-size: 12px;
         }
         .progress-container {
             width: 100%;
-            margin-top: 20px;
+            margin-top: 15px;
         }
         progress {
             width: 100%;
@@ -80,64 +105,182 @@
             display: flex;
             justify-content: space-between;
             margin-top: 10px;
+            font-size: 14px;
+        }
+        .status-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+        .status-connected {
+            background-color: #4CAF50;
+        }
+        .status-disconnected {
+            background-color: #f44336;
+        }
+        .status-processing {
+            background-color: #ff9800;
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>YOLOv10 视频流检测测试</h1>
+        <h1>YOLOv10 火焰烟雾检测测试系统</h1>
 
-        <div class="upload-section">
-            <h2>上传视频文件</h2>
-            <input type="file" id="video-upload" accept="video/*">
-            <button id="upload-btn">上传并处理</button>
-        </div>
-
-        <div class="video-container">
-            <h2>检测结果</h2>
-            <img id="video-display" src="" alt="检测结果将显示在这里">
-
+        <!-- WebSocket连接状态 -->
+        <div class="section">
+            <h2>连接状态</h2>
+            <div>
+                <span class="status-indicator" id="connection-status"></span>
+                <span id="connection-text">未连接</span>
+            </div>
             <div class="controls">
                 <button id="connect-btn">连接WebSocket</button>
                 <button id="disconnect-btn" disabled>断开连接</button>
-                <button id="stop-btn" disabled>停止处理</button>
+            </div>
+        </div>
+
+        <!-- 摄像头实时检测 -->
+        <div class="section camera-controls">
+            <h2>📹 摄像头实时检测</h2>
+            <div class="video-container">
+                <div class="video-display">
+                    <h3>原始视频流</h3>
+                    <video id="camera-video" autoplay muted></video>
+                    <canvas id="camera-canvas" style="display: none;"></canvas>
+                </div>
+                <div class="video-display">
+                    <h3>检测结果</h3>
+                    <img id="camera-result" src="" alt="摄像头检测结果将显示在这里">
+                </div>
+            </div>
+
+            <div class="controls">
+    <button id="start-camera-btn">启动摄像头</button>
+    <button id="stop-camera-btn" disabled>停止摄像头</button>
+    <label>
+        帧率控制: <select id="camera-fps">
+            <option value="5">5 FPS</option>
+            <option value="10">10 FPS</option>
+            <option value="15" selected>15 FPS</option>
+            <option value="20">20 FPS</option>
+            <option value="25">25 FPS</option>
+            <option value="30">30 FPS</option>
+        </select>
+    </label>
+    <label>
+        图像质量: <select id="image-quality">
+            <option value="0.3">低质量 (流畅)</option>
+            <option value="0.5" selected>中等质量</option>
+            <option value="0.7">高质量</option>
+            <option value="0.9">最高质量</option>
+        </select>
+    </label>
+    <label>
+        <input type="checkbox" id="skip-frames" checked> 智能跳帧
+    </label>
+</div>
+
+<div class="stats">
+    <span id="camera-detection-count">检测到: 0 个物体</span>
+    <span id="camera-inference-time">推理时间: 0 ms</span>
+    <span id="camera-frame-count">处理帧数: 0</span>
+    <span id="camera-fps-display">实际FPS: 0</span>
+</div>
+        </div>
+
+        <!-- 视频文件流式处理 -->
+        <div class="section video-controls">
+            <h2>🎬 视频文件流式处理</h2>
+            <div class="upload-section">
+                <h3>上传视频文件</h3>
+                <input type="file" id="video-upload" accept="video/*">
+                <button id="upload-btn">上传并处理</button>
+            </div>
+
+            <div class="video-container">
+                <div class="video-display">
+                    <h3>处理结果</h3>
+                    <img id="video-display" src="" alt="视频检测结果将显示在这里">
+                </div>
+            </div>
+
+            <div class="controls">
+                <button id="stop-video-btn" disabled>停止视频处理</button>
             </div>
 
             <div class="progress-container">
                 <progress id="processing-progress" value="0" max="100"></progress>
                 <div class="stats">
                     <span id="progress-text">0/0 (0%)</span>
-                    <span id="detection-count">检测到: 0 个物体</span>
-                    <span id="inference-time">推理时间: 0 ms</span>
+                    <span id="video-detection-count">检测到: 0 个物体</span>
+                    <span id="video-inference-time">推理时间: 0 ms</span>
                 </div>
             </div>
         </div>
 
+        <!-- 日志 -->
         <div class="log-section">
-            <h2>日志</h2>
+            <h2>📋 操作日志</h2>
             <div id="log"></div>
+            <button onclick="document.getElementById('log').innerHTML = ''">清空日志</button>
         </div>
     </div>
 
-    <script>
+<script>
         // WebSocket 连接
         let ws = null;
-        let videoData = null;
         let videoPath = null;
         let outputPath = null;
+
+        // 摄像头相关变量
+        let cameraStream = null;
+        let cameraProcessing = false;
+        let frameId = 0;
+        let frameCounter = 0;  // 修改：使用新的变量名来跟踪处理的帧数
+        let processingInterval = null;
+
+         // 性能优化相关变量
+        let pendingFrames = 0;  // 等待处理的帧数
+        let maxPendingFrames = 3;  // 最大等待帧数
+        let lastFrameTime = 0;  // 上一帧时间戳
+        let fpsCounter = 0;  // FPS计数器
+        let fpsStartTime = Date.now();  // FPS计算开始时间
+        let lastResultFrame = null;  // 缓存上一帧的结果
 
         // DOM 元素
         const connectBtn = document.getElementById('connect-btn');
         const disconnectBtn = document.getElementById('disconnect-btn');
-        const stopBtn = document.getElementById('stop-btn');
+        const connectionStatus = document.getElementById('connection-status');
+        const connectionText = document.getElementById('connection-text');
+
+        // 摄像头控件
+        const startCameraBtn = document.getElementById('start-camera-btn');
+        const stopCameraBtn = document.getElementById('stop-camera-btn');
+        const cameraVideo = document.getElementById('camera-video');
+        const cameraCanvas = document.getElementById('camera-canvas');
+        const cameraResult = document.getElementById('camera-result');
+        const cameraFpsSelect = document.getElementById('camera-fps');
+        const imageQualitySelect = document.getElementById('image-quality');
+        const skipFramesCheckbox = document.getElementById('skip-frames');
+        const cameraDetectionCount = document.getElementById('camera-detection-count');
+        const cameraInferenceTime = document.getElementById('camera-inference-time');
+        const cameraFrameCount = document.getElementById('camera-frame-count');
+        const cameraFpsDisplay = document.getElementById('camera-fps-display');
+
+        // 视频控件
         const uploadBtn = document.getElementById('upload-btn');
         const videoUpload = document.getElementById('video-upload');
         const videoDisplay = document.getElementById('video-display');
-        const log = document.getElementById('log');
+        const stopVideoBtn = document.getElementById('stop-video-btn');
         const progressBar = document.getElementById('processing-progress');
         const progressText = document.getElementById('progress-text');
-        const detectionCount = document.getElementById('detection-count');
-        const inferenceTime = document.getElementById('inference-time');
+        const videoDetectionCount = document.getElementById('video-detection-count');
+        const videoInferenceTime = document.getElementById('video-inference-time');
+
+        const log = document.getElementById('log');
 
         // 日志函数
         function logMessage(message, isError = false) {
@@ -148,6 +291,34 @@
             }
             log.appendChild(logItem);
             log.scrollTop = log.scrollHeight;
+        }
+
+        // 更新连接状态显示
+        function updateConnectionStatus(connected, processing = false) {
+            if (connected) {
+                if (processing) {
+                    connectionStatus.className = 'status-indicator status-processing';
+                    connectionText.textContent = '处理中';
+                } else {
+                    connectionStatus.className = 'status-indicator status-connected';
+                    connectionText.textContent = '已连接';
+                }
+            } else {
+                connectionStatus.className = 'status-indicator status-disconnected';
+                connectionText.textContent = '未连接';
+            }
+        }
+
+        // 计算和显示实际FPS
+        function updateFpsDisplay() {
+            fpsCounter++;
+            const now = Date.now();
+            if (now - fpsStartTime >= 1000) {  // 每秒更新一次
+                const actualFps = fpsCounter / ((now - fpsStartTime) / 1000);
+                cameraFpsDisplay.textContent = `实际FPS: ${actualFps.toFixed(1)}`;
+                fpsCounter = 0;
+                fpsStartTime = now;
+            }
         }
 
         // 连接 WebSocket
@@ -163,8 +334,8 @@
                 logMessage('WebSocket 连接已建立');
                 connectBtn.disabled = true;
                 disconnectBtn.disabled = false;
+                updateConnectionStatus(true);
 
-                // 如果已上传视频，发送处理命令
                 if (videoPath) {
                     sendVideoPathCommand();
                 }
@@ -178,27 +349,49 @@
                         logMessage(`连接已建立，客户端ID: ${message.client_id}`);
                         break;
 
+                    case 'camera_stream_started':
+                        logMessage('摄像头流处理已启动');
+                        updateConnectionStatus(true, true);
+                        break;
+
+                    case 'camera_stream_stopped':
+                        logMessage('摄像头流处理已停止');
+                        updateConnectionStatus(true, false);
+                        break;
+
+                    case 'camera_frame_result':
+                        // 减少待处理帧数
+                        pendingFrames = Math.max(0, pendingFrames - 1);
+
+                        // 更新摄像头检测结果
+                        cameraResult.src = message.annotated_frame;
+                        lastResultFrame = message.annotated_frame;  // 缓存结果
+
+                        cameraDetectionCount.textContent = `检测到: ${message.detection_count} 个物体`;
+                        cameraInferenceTime.textContent = `推理时间: ${message.inference_time} ms`;
+                        cameraFrameCount.textContent = `处理帧数: ${++frameCounter}`;
+
+                        // 更新FPS显示
+                        updateFpsDisplay();
+                        break;
+
                     case 'video_info':
                         logMessage(`视频信息: ${message.width}x${message.height}, FPS: ${message.fps}, 总帧数: ${message.total_frames}`);
                         progressBar.max = message.total_frames;
-                        stopBtn.disabled = false;
+                        stopVideoBtn.disabled = false;
+                        updateConnectionStatus(true, true);
                         break;
 
                     case 'frame_result':
-                        // 更新视频帧
                         videoDisplay.src = `data:image/jpeg;base64,${message.annotated_frame}`;
 
-                        // 更新进度
                         if (message.progress) {
                             progressBar.value = message.progress.current;
                             progressText.textContent = `${message.progress.current}/${message.progress.total} (${message.progress.percent}%)`;
                         }
 
-                        // 更新检测计数
-                        detectionCount.textContent = `检测到: ${message.detection_count} 个物体`;
-
-                        // 更新推理时间
-                        inferenceTime.textContent = `推理时间: ${message.inference_time} ms`;
+                        videoDetectionCount.textContent = `检测到: ${message.detection_count} 个物体`;
+                        videoInferenceTime.textContent = `推理时间: ${message.inference_time} ms`;
                         break;
 
                     case 'processing_started':
@@ -206,18 +399,21 @@
                         if (message.save_output) {
                             logMessage(`输出将保存到: ${message.output_path}`);
                         }
+                        updateConnectionStatus(true, true);
                         break;
 
                     case 'processing_complete':
-                        logMessage(`处理完成，共处理 ${message.frames_processed} 帧`);
+                        logMessage(`视频处理完成，共处理 ${message.frames_processed} 帧`);
                         if (message.output_path) {
                             logMessage(`输出已保存到: ${message.output_path}`);
                         }
-                        stopBtn.disabled = true;
+                        stopVideoBtn.disabled = true;
+                        updateConnectionStatus(true, false);
                         break;
 
                     case 'error':
                         logMessage(`错误: ${message.message}`, true);
+                        pendingFrames = Math.max(0, pendingFrames - 1);  // 出错时也要减少待处理帧数
                         break;
 
                     default:
@@ -230,7 +426,12 @@
                 ws = null;
                 connectBtn.disabled = false;
                 disconnectBtn.disabled = true;
-                stopBtn.disabled = true;
+                stopVideoBtn.disabled = true;
+                updateConnectionStatus(false);
+
+                if (cameraProcessing) {
+                    stopCameraProcessing();
+                }
             };
 
             ws.onerror = (error) => {
@@ -246,17 +447,155 @@
             }
             connectBtn.disabled = false;
             disconnectBtn.disabled = true;
-            stopBtn.disabled = true;
+            stopVideoBtn.disabled = true;
+            updateConnectionStatus(false);
+
+            if (cameraProcessing) {
+                stopCameraProcessing();
+            }
         });
 
-        // 停止处理
-        stopBtn.addEventListener('click', () => {
+        // 启动摄像头
+        startCameraBtn.addEventListener('click', async () => {
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                logMessage('请先连接WebSocket', true);
+                return;
+            }
+
+            try {
+                logMessage('正在请求摄像头权限...');
+                cameraStream = await navigator.mediaDevices.getUserMedia({
+                    video: {
+                        width: { ideal: 640 },
+                        height: { ideal: 480 },
+                        frameRate: { ideal: 30 }  // 请求更高的摄像头帧率
+                    }
+                });
+
+                cameraVideo.srcObject = cameraStream;
+                logMessage('摄像头启动成功');
+
+                cameraVideo.onloadedmetadata = () => {
+                    cameraCanvas.width = cameraVideo.videoWidth;
+                    cameraCanvas.height = cameraVideo.videoHeight;
+                    startCameraProcessing();
+                };
+
+                startCameraBtn.disabled = true;
+                stopCameraBtn.disabled = false;
+
+            } catch (error) {
+                logMessage(`摄像头启动失败: ${error.message}`, true);
+            }
+        });
+
+        // 停止摄像头
+        stopCameraBtn.addEventListener('click', () => {
+            stopCameraProcessing();
+        });
+
+        // 开始摄像头处理 - 优化版本
+        function startCameraProcessing() {
+            if (!ws || ws.readyState !== WebSocket.OPEN || !cameraStream) {
+                return;
+            }
+
+            cameraProcessing = true;
+            frameId = 0;
+            frameCounter = 0;
+            pendingFrames = 0;
+            fpsCounter = 0;
+            fpsStartTime = Date.now();
+
+            ws.send(JSON.stringify({
+                type: 'start_camera'
+            }));
+
+            const targetFps = parseInt(cameraFpsSelect.value);
+            const interval = 1000 / targetFps;
+
+            processingInterval = setInterval(() => {
+                if (!cameraProcessing || !cameraVideo.videoWidth) {
+                    return;
+                }
+
+                // 智能跳帧：如果处理队列过长，跳过这一帧
+                const skipFrames = skipFramesCheckbox.checked;
+                if (skipFrames && pendingFrames >= maxPendingFrames) {
+                    return;
+                }
+
+                // 捕获当前帧
+                const context = cameraCanvas.getContext('2d');
+                context.drawImage(cameraVideo, 0, 0, cameraCanvas.width, cameraCanvas.height);
+
+                // 根据质量设置获取图像数据
+                const quality = parseFloat(imageQualitySelect.value);
+                const frameData = cameraCanvas.toDataURL('image/jpeg', quality);
+
+                // 异步发送到服务器（不等待返回）
+                if (ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify({
+                        type: 'camera_frame',
+                        data: frameData,
+                        frame_id: frameId++
+                    }));
+
+                    pendingFrames++;
+                }
+
+            }, interval);
+
+            logMessage(`摄像头处理已启动，目标帧率: ${targetFps} FPS，图像质量: ${imageQualitySelect.options[imageQualitySelect.selectedIndex].text}`);
+        }
+
+        // 停止摄像头处理
+        function stopCameraProcessing() {
+            if (processingInterval) {
+                clearInterval(processingInterval);
+                processingInterval = null;
+            }
+
+            if (cameraStream) {
+                cameraStream.getTracks().forEach(track => track.stop());
+                cameraStream = null;
+                cameraVideo.srcObject = null;
+            }
+
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({
+                    type: 'stop_camera'
+                }));
+            }
+
+            cameraProcessing = false;
+            frameId = 0;
+            frameCounter = 0;
+            pendingFrames = 0;
+            lastResultFrame = null;
+
+            startCameraBtn.disabled = false;
+            stopCameraBtn.disabled = true;
+
+            // 清空显示
+            cameraResult.src = '';
+            cameraDetectionCount.textContent = '检测到: 0 个物体';
+            cameraInferenceTime.textContent = '推理时间: 0 ms';
+            cameraFrameCount.textContent = '处理帧数: 0';
+            cameraFpsDisplay.textContent = '实际FPS: 0';
+
+            logMessage('摄像头处理已停止');
+        }
+
+        // 停止视频处理
+        stopVideoBtn.addEventListener('click', () => {
             if (ws) {
                 ws.send(JSON.stringify({
                     type: 'stop'
                 }));
-                logMessage('已发送停止处理命令');
-                stopBtn.disabled = true;
+                logMessage('已发送停止视频处理命令');
+                stopVideoBtn.disabled = true;
+                updateConnectionStatus(true, false);
             }
         });
 
@@ -287,11 +626,9 @@
                 const result = await response.json();
                 logMessage(`上传成功: ${result.message}`);
 
-                // 保存路径信息
                 videoPath = result.video_path;
                 outputPath = result.output_path;
 
-                // 如果已连接WebSocket，发送处理命令
                 if (ws && ws.readyState === WebSocket.OPEN) {
                     sendVideoPathCommand();
                 } else {
@@ -328,13 +665,36 @@
 
         // 页面加载时初始化
         window.addEventListener('load', () => {
-            logMessage('页面已加载，请上传视频或连接WebSocket');
+            logMessage('页面已加载，请先连接WebSocket，然后选择功能进行测试');
+            updateConnectionStatus(false);
         });
 
         // 页面关闭时清理
         window.addEventListener('beforeunload', () => {
+            if (cameraProcessing) {
+                stopCameraProcessing();
+            }
             if (ws) {
                 ws.close();
+            }
+        });
+
+        // 帧率或质量改变时重新启动处理
+        cameraFpsSelect.addEventListener('change', () => {
+            if (cameraProcessing) {
+                logMessage(`调整帧率到: ${cameraFpsSelect.value} FPS`);
+                stopCameraProcessing();
+                setTimeout(() => {
+                    if (cameraStream) {
+                        startCameraProcessing();
+                    }
+                }, 100);
+            }
+        });
+
+        imageQualitySelect.addEventListener('change', () => {
+            if (cameraProcessing) {
+                logMessage(`调整图像质量到: ${imageQualitySelect.options[imageQualitySelect.selectedIndex].text}`);
             }
         });
     </script>

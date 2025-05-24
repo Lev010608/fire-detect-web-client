@@ -273,6 +273,109 @@ class VideoStreamProcessor:
             if client_id in self.processing_threads:
                 del self.processing_threads[client_id]
 
+    async def process_camera_frame(self, frame_data, client_id: str, frame_id: Optional[int] = None):
+        """处理摄像头帧并返回结果"""
+        try:
+            # 解码base64图像数据
+            if ',' in frame_data:
+                frame_data = frame_data.split(',')[1]  # 移除data:image/jpeg;base64,前缀
+
+            decoded_data = base64.b64decode(frame_data)
+            np_arr = np.frombuffer(decoded_data, np.uint8)
+            frame = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+
+            if frame is None:
+                raise ValueError("Failed to decode camera frame")
+
+            # 记录帧大小
+            self.logger.info(f"Processing camera frame {frame_id} for client {client_id}, shape: {frame.shape}")
+
+            # 运行模型推理
+            start_time = time.time()
+            results = self.model(frame)[0]
+            inference_time = time.time() - start_time
+
+            # 获取检测结果
+            boxes = results.boxes
+            detection_params = []
+
+            if len(boxes) > 0:
+                location_list = boxes.xyxy.cpu().numpy().tolist() if hasattr(boxes.xyxy, 'cpu') else boxes.xyxy.tolist()
+                cls_list = boxes.cls.cpu().numpy().tolist() if hasattr(boxes.cls, 'cpu') else boxes.cls.tolist()
+                conf_list = boxes.conf.cpu().numpy().tolist() if hasattr(boxes.conf, 'cpu') else boxes.conf.tolist()
+
+                for box, cls, conf in zip(location_list, cls_list, conf_list):
+                    cls_int = int(cls)
+                    class_name = self.config.CH_names[cls_int] if cls_int < len(
+                        self.config.CH_names) else f"未知类别{cls_int}"
+                    detection_params.append({
+                        "bbox": [int(x) for x in box],  # x1, y1, x2, y2
+                        "class": cls_int,
+                        "class_name": class_name,
+                        "confidence": float(conf)
+                    })
+
+            # 获取标注后的图像
+            annotated_frame = results.plot()
+
+            # 将图像编码为JPEG，然后转换为base64
+            _, buffer = cv2.imencode('.jpg', annotated_frame)
+            encoded_frame = base64.b64encode(buffer).decode('utf-8')
+
+            # 构建并返回结果
+            result = {
+                "type": "camera_frame_result",
+                "frame_id": frame_id,
+                "detections": detection_params,
+                "detection_count": len(detection_params),
+                "annotated_frame": f"data:image/jpeg;base64,{encoded_frame}",
+                "inference_time": round(inference_time * 1000, 2)  # 毫秒
+            }
+
+            # 发送结果给客户端
+            if client_id in self.active_connections:
+                await self.active_connections[client_id].send_json(result)
+                return result
+
+        except Exception as e:
+            self.logger.error(f"Error processing camera frame {frame_id} for client {client_id}: {str(e)}")
+            if client_id in self.active_connections:
+                await self.active_connections[client_id].send_json({
+                    "type": "error",
+                    "frame_id": frame_id,
+                    "message": str(e)
+                })
+            return None
+
+    async def start_camera_stream(self, client_id: str):
+        """开始摄像头流处理"""
+        if client_id not in self.active_connections:
+            self.logger.error(f"No active connection for client {client_id}")
+            return
+
+        websocket = self.active_connections[client_id]
+
+        # 发送确认消息
+        await websocket.send_json({
+            "type": "camera_stream_started",
+            "client_id": client_id,
+            "message": "Camera stream processing started"
+        })
+
+    async def stop_camera_stream(self, client_id: str):
+        """停止摄像头流处理"""
+        if client_id not in self.active_connections:
+            return
+
+        websocket = self.active_connections[client_id]
+
+        # 发送停止确认消息
+        await websocket.send_json({
+            "type": "camera_stream_stopped",
+            "client_id": client_id,
+            "message": "Camera stream processing stopped"
+        })
+
     async def _send_error(self, websocket, message):
         """发送错误消息给客户端"""
         try:

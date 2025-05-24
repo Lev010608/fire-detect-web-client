@@ -523,6 +523,20 @@ async def video_stream_endpoint(websocket: WebSocket):
                         "message": "Processing stopped by client request"
                     })
 
+            elif msg_type == "camera_frame":
+                # 处理摄像头帧
+                frame_data = message.get("data")
+                frame_id = message.get("frame_id")
+                await stream_processor.process_camera_frame(frame_data, client_id, frame_id)
+
+            elif msg_type == "start_camera":
+                # 开始摄像头流
+                await stream_processor.start_camera_stream(client_id)
+
+            elif msg_type == "stop_camera":
+                # 停止摄像头流
+                await stream_processor.stop_camera_stream(client_id)
+
             elif msg_type == "ping":
                 # 心跳检测
                 await websocket.send_json({
@@ -612,6 +626,11 @@ async def stream_video(file: UploadFile = File(...)):
 @app.get("/test_video_stream")
 async def test_video_stream():
     """返回视频流测试页面"""
+    return FileResponse(os.path.join(static_dir, "video_stream_test.html"))
+
+@app.get("/test_camera")
+async def test_camera():
+    """返回摄像头测试页面"""
     return FileResponse(os.path.join(static_dir, "video_stream_test.html"))
 
 
