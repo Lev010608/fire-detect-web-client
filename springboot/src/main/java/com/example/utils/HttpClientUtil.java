@@ -218,6 +218,10 @@ public class HttpClientUtil {
     public static Map<String, Object> detectFrameBase64(String imageBase64, Map<String, Object> options) throws Exception {
         String url = FASTAPI_BASE_URL + "/detect_frame_base64";
 
+        System.out.println("=== HttpClientUtil.detectFrameBase64 ===");
+        System.out.println("请求URL: " + url);
+        System.out.println("图像数据长度: " + (imageBase64 != null ? imageBase64.length() : 0));
+
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
 
@@ -229,10 +233,19 @@ public class HttpClientUtil {
         HttpEntity<String> entity = new HttpEntity<>(jsonData, headers);
 
         try {
+            System.out.println("发送请求到FastAPI...");
             ResponseEntity<Map> response = restTemplate.exchange(url, HttpMethod.POST, entity, Map.class);
+
+            System.out.println("FastAPI响应状态: " + response.getStatusCode());
+            System.out.println("FastAPI响应数据: " + response.getBody());
+
             return response.getBody();
         } catch (HttpClientErrorException e) {
+            System.out.println("FastAPI请求失败: " + e.getStatusCode() + " - " + e.getResponseBodyAsString());
             throw new Exception("FastAPI单帧检测失败：" + e.getResponseBodyAsString());
+        } catch (Exception e) {
+            System.out.println("请求异常: " + e.getMessage());
+            throw new Exception("FastAPI请求异常: " + e.getMessage());
         }
     }
 

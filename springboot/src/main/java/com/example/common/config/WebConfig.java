@@ -28,6 +28,7 @@ public class WebConfig implements WebMvcConfigurer {
                 .excludePathPatterns("/visuals/debug/**")
                 .excludePathPatterns("/visuals/test/**")
                 .excludePathPatterns("/visuals/download/**")
+                .excludePathPatterns("/visuals/detect_frame_base64")
 
                 .excludePathPatterns("/ws/**")           // WebSocket端点
                 .excludePathPatterns("/realtime/**")

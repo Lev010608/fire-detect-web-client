@@ -377,6 +377,36 @@ public class VisualsLabelingController {
     }
 
     /**
+     * Base64图像检测API - 摄像头实时检测专用
+     */
+    @PostMapping("/detect_frame_base64")
+    public Result detectFrameBase64(@RequestBody Map<String, Object> request) {
+        try {
+            logger.info("=== 摄像头帧检测请求 ===");
+
+            // 获取请求参数
+            String imageData = (String) request.get("image");
+            Map<String, Object> options = (Map<String, Object>) request.get("options");
+
+            if (imageData == null || imageData.trim().isEmpty()) {
+                return Result.error("400", "图像数据不能为空");
+            }
+
+            logger.info("收到摄像头帧检测请求，图像数据长度: " + imageData.length());
+
+            // 调用FastAPI进行检测
+            Map<String, Object> fastApiResult = HttpClientUtil.detectFrameBase64(imageData, options);
+            logger.info("FastAPI检测结果: " + fastApiResult);
+
+            return Result.success(fastApiResult);
+
+        } catch (Exception e) {
+            logger.error("摄像头帧检测失败", e);
+            return Result.error("500", "摄像头帧检测失败：" + e.getMessage());
+        }
+    }
+
+    /**
      * 测试批量文件访问
      */
     @GetMapping("/test/batch/{filename}")

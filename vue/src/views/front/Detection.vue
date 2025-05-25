@@ -1415,8 +1415,16 @@ export default {
       const targetFps = this.cameraParams.fps
       const interval = 1000 / targetFps
 
+      let pendingFrames = 0  // 添加这个变量
+      const maxPendingFrames = 3
+
       this.processingInterval = setInterval(() => {
         if (!this.cameraDetection.active || !this.$refs.cameraVideo.videoWidth) {
+          return
+        }
+
+        // 🔥 智能跳帧：如果处理队列过长，跳过这一帧
+        if (this.cameraParams.skipFrames && pendingFrames >= maxPendingFrames) {
           return
         }
 
@@ -1427,8 +1435,12 @@ export default {
         // 获取图像数据
         const frameData = this.$refs.cameraCanvas.toDataURL('image/jpeg', this.cameraParams.quality)
 
-        // 发送到后端进行检测
-        this.processCameraFrame(frameData)
+        pendingFrames++
+
+        // 异步处理，完成后减少计数
+        this.processCameraFrame(frameData).finally(() => {
+          pendingFrames = Math.max(0, pendingFrames - 1)
+        })
 
       }, interval)
 
@@ -1437,22 +1449,21 @@ export default {
 
     async processCameraFrame(frameData) {
       try {
-        // 通过API直接处理单帧
         const response = await this.$request.post('/visuals/detect_frame_base64', {
           image: frameData,
           options: {
             return_annotated: true,
-            image_quality: this.cameraParams.quality
+            image_quality: this.cameraParams.quality,
+            skip_frames: this.cameraParams.skipFrames,
+            target_fps: this.cameraParams.fps,
+            optimization_level: 'medium'  // 可以是 'low', 'medium', 'high'
           }
         })
 
         if (response.code === '200' && response.data.success) {
-          // 更新检测结果
           this.cameraDetection.lastResult = response.data.annotated_image
           this.cameraDetection.totalDetections += response.data.detection_count
           this.cameraDetection.processedFrames++
-
-          // 更新FPS
           this.updateFpsDisplay()
         }
       } catch (error) {
