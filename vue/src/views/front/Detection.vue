@@ -1,61 +1,210 @@
 <template>
   <div class="detection-container">
-    <!-- 顶部标题 -->
+    <!-- 顶部标题区域 -->
     <div class="header">
-      <h1>YOLOv10 火焰烟雾检测系统</h1>
+      <div class="header-content">
+        <h1>{{ getPageTitle() }}</h1>
+        <p class="page-subtitle">{{ getPageSubtitle() }}</p>
+      </div>
+      <!-- 返回主选单按钮 -->
+      <div class="back-button">
+        <el-button
+            type="primary"
+            size="medium"
+            @click="backToHome"
+            icon="el-icon-back">
+          回到主选单
+        </el-button>
+      </div>
     </div>
 
-    <!-- 文件操作区域 -->
-    <div class="file-actions">
-      <el-upload
-          class="upload-demo"
-          :action="uploadUrl"
-          :headers="uploadHeaders"
-          :on-success="handleImageSuccess"
-          :on-error="handleError"
-          :before-upload="beforeImageUpload"
-          :show-file-list="false"
-          accept="image/*">
-        <el-button class="file-btn" type="primary" size="large" :loading="imageLoading">
-          {{ imageLoading ? '处理中...' : '选择图片检测' }}
-        </el-button>
-      </el-upload>
+    <!-- 动态功能操作区域 -->
+    <div class="dynamic-actions">
+      <!-- 图片检测界面 -->
+      <div v-if="currentMode === 'image'" class="mode-section">
+        <el-card class="action-card">
+          <div slot="header" class="card-header">
+            <i class="el-icon-picture-outline"></i>
+            <span>图片检测</span>
+          </div>
+          <div class="upload-area">
+            <el-upload
+                class="upload-demo"
+                :action="uploadUrl"
+                :headers="uploadHeaders"
+                :on-success="handleImageSuccess"
+                :on-error="handleError"
+                :before-upload="beforeImageUpload"
+                :show-file-list="false"
+                accept="image/*"
+                drag>
+              <div class="upload-content">
+                <i class="el-icon-upload upload-icon"></i>
+                <div class="upload-text">
+                  <p>{{ imageLoading ? '处理中...' : '点击选择图片或拖拽图片到此处' }}</p>
+                  <p class="upload-hint">支持 JPG、PNG、GIF 等格式，文件大小不超过 100MB</p>
+                </div>
+              </div>
+            </el-upload>
+          </div>
+        </el-card>
+      </div>
 
-      <el-upload
-          class="upload-demo"
-          :action="uploadUrl"
-          :headers="uploadHeaders"
-          :on-success="handleVideoSuccess"
-          :on-error="handleError"
-          :before-upload="beforeVideoUpload"
-          :show-file-list="false"
-          accept="video/*">
-        <el-button class="file-btn" type="primary" size="large" :loading="videoLoading">
-          {{ videoLoading ? '处理中...' : '选择视频检测' }}
-        </el-button>
-      </el-upload>
+      <!-- 视频检测界面 -->
+      <div v-else-if="currentMode === 'video'" class="mode-section">
+        <el-card class="action-card">
+          <div slot="header" class="card-header">
+            <i class="el-icon-video-camera"></i>
+            <span>视频检测</span>
+          </div>
+          <div class="video-options">
+            <el-row :gutter="30">
+              <el-col :span="12">
+                <div class="option-card" @click="selectVideoOption('upload')">
+                  <div class="option-icon">
+                    <i class="el-icon-upload2"></i>
+                  </div>
+                  <h3>传入整个视频</h3>
+                  <p>上传完整视频文件进行检测分析</p>
+                  <el-upload
+                      v-if="selectedVideoOption === 'upload'"
+                      class="upload-demo"
+                      :action="uploadUrl"
+                      :headers="uploadHeaders"
+                      :on-success="handleVideoSuccess"
+                      :on-error="handleError"
+                      :before-upload="beforeVideoUpload"
+                      :show-file-list="false"
+                      accept="video/*">
+                    <el-button class="upload-btn" type="primary" size="large" :loading="videoLoading">
+                      {{ videoLoading ? '处理中...' : '选择视频文件' }}
+                    </el-button>
+                  </el-upload>
+                </div>
+              </el-col>
+              <el-col :span="12">
+                <div class="option-card" @click="selectVideoOption('stream')">
+                  <div class="option-icon">
+                    <i class="el-icon-video-play"></i>
+                  </div>
+                  <h3>实时检测</h3>
+                  <p>实时视频流检测分析</p>
+                  <el-upload
+                      v-if="selectedVideoOption === 'stream'"
+                      class="upload-demo"
+                      :action="''"
+                      :auto-upload="false"
+                      :on-change="handleStreamVideoSelect"
+                      :show-file-list="false"
+                      accept="video/*">
+                    <el-button class="upload-btn" type="success" size="large" :loading="streamVideoLoading">
+                      {{ streamVideoLoading ? '处理中...' : '选择视频进行实时检测' }}
+                    </el-button>
+                  </el-upload>
+                </div>
+              </el-col>
+            </el-row>
+          </div>
+        </el-card>
+      </div>
 
-      <el-button class="file-btn" type="primary" size="large" @click="showBatchDialog" :loading="batchLoading">
-        {{ batchLoading ? '处理中...' : '批量图片检测' }}
-      </el-button>
+      <!-- 批量处理界面 -->
+      <div v-else-if="currentMode === 'batch'" class="mode-section">
+        <el-card class="action-card">
+          <div slot="header" class="card-header">
+            <i class="el-icon-folder-opened"></i>
+            <span>批量图片检测</span>
+          </div>
+          <div class="batch-form">
+            <el-form :model="batchForm" label-width="120px" size="large">
+              <el-form-item label="文件夹路径">
+                <el-input
+                    v-model="batchForm.folderPath"
+                    placeholder="请输入包含图片的文件夹路径，如：C:/Images/TestFolder"
+                    size="large">
+                  <el-button
+                      slot="append"
+                      type="primary"
+                      @click="handleBatchDetection"
+                      :loading="batchLoading">
+                    {{ batchLoading ? '处理中...' : '开始检测' }}
+                  </el-button>
+                </el-input>
+              </el-form-item>
+            </el-form>
+            <div class="batch-hint">
+              <el-alert
+                  title="使用提示"
+                  description="请确保文件夹路径正确，支持的图片格式包括：JPG、PNG、GIF等。系统将自动处理文件夹中的所有图片文件。"
+                  type="info"
+                  :closable="false">
+              </el-alert>
+            </div>
+          </div>
+        </el-card>
+      </div>
 
-      <!-- 实时视频流检测按钮 -->
-      <el-upload
-          class="upload-demo"
-          :action="''"
-          :auto-upload="false"
-          :on-change="handleStreamVideoSelect"
-          :show-file-list="false"
-          accept="video/*">
-        <el-button class="file-btn" type="success" size="large" :loading="streamVideoLoading">
-          {{ streamVideoLoading ? '处理中...' : '实时视频流检测' }}
-        </el-button>
-      </el-upload>
-
-      <!-- 摄像头实时检测按钮 -->
-      <el-button class="file-btn" type="warning" size="large" @click="showCameraDialog" :loading="cameraLoading">
-        {{ cameraLoading ? '启动中...' : '摄像头实时检测' }}
-      </el-button>
+      <!-- 摄像头检测界面 -->
+      <div v-else-if="currentMode === 'camera'" class="mode-section">
+        <el-card class="action-card">
+          <div slot="header" class="card-header">
+            <i class="el-icon-camera"></i>
+            <span>摄像头实时检测</span>
+          </div>
+          <div class="camera-setup">
+            <div class="camera-params">
+              <el-row :gutter="20">
+                <el-col :span="6">
+                  <div class="param-item">
+                    <label>帧率控制:</label>
+                    <el-select v-model="cameraParams.fps" size="small" @change="updateCameraParams">
+                      <el-option label="5 FPS" :value="5"></el-option>
+                      <el-option label="10 FPS" :value="10"></el-option>
+                      <el-option label="15 FPS" :value="15"></el-option>
+                      <el-option label="20 FPS" :value="20"></el-option>
+                      <el-option label="25 FPS" :value="25"></el-option>
+                      <el-option label="30 FPS" :value="30"></el-option>
+                    </el-select>
+                  </div>
+                </el-col>
+                <el-col :span="6">
+                  <div class="param-item">
+                    <label>图像质量:</label>
+                    <el-select v-model="cameraParams.quality" size="small" @change="updateCameraParams">
+                      <el-option label="低质量(流畅)" :value="0.3"></el-option>
+                      <el-option label="中等质量" :value="0.5"></el-option>
+                      <el-option label="高质量" :value="0.7"></el-option>
+                      <el-option label="最高质量" :value="0.9"></el-option>
+                    </el-select>
+                  </div>
+                </el-col>
+                <el-col :span="6">
+                  <div class="param-item">
+                    <label>智能跳帧:</label>
+                    <el-switch v-model="cameraParams.skipFrames" @change="updateCameraParams"></el-switch>
+                  </div>
+                </el-col>
+                <el-col :span="6">
+                  <div class="param-item">
+                    <label>保存结果:</label>
+                    <el-switch v-model="cameraParams.saveResult"></el-switch>
+                  </div>
+                </el-col>
+              </el-row>
+            </div>
+            <div class="camera-controls">
+              <el-button
+                  type="primary"
+                  size="large"
+                  @click="startCameraDetection"
+                  :loading="cameraLoading"
+                  :disabled="cameraDetection.show">
+                {{ cameraLoading ? '启动中...' : '开始摄像头检测' }}
+              </el-button>
+            </div>
+          </div>
+        </el-card>
+      </div>
     </div>
 
     <!-- 检测结果展示区域 -->
@@ -543,7 +692,7 @@
       </el-card>
     </div>
 
-    <!-- 🔥 新增：摄像头检测区域 -->
+    <!-- 🔥 摄像头检测区域 -->
     <div class="camera-detection" v-if="cameraDetection.show">
       <el-card class="camera-card">
         <div slot="header" class="camera-header">
@@ -553,48 +702,6 @@
             <el-button type="danger" size="small" @click="stopCamera" :disabled="!cameraDetection.active">停止摄像头</el-button>
             <el-button type="info" size="small" @click="closeCameraDetection">关闭检测</el-button>
           </div>
-        </div>
-
-        <!-- 摄像头参数控制 -->
-        <div class="camera-params">
-          <el-row :gutter="20">
-            <el-col :span="6">
-              <div class="param-item">
-                <label>帧率控制:</label>
-                <el-select v-model="cameraParams.fps" size="small" @change="updateCameraParams">
-                  <el-option label="5 FPS" :value="5"></el-option>
-                  <el-option label="10 FPS" :value="10"></el-option>
-                  <el-option label="15 FPS" :value="15"></el-option>
-                  <el-option label="20 FPS" :value="20"></el-option>
-                  <el-option label="25 FPS" :value="25"></el-option>
-                  <el-option label="30 FPS" :value="30"></el-option>
-                </el-select>
-              </div>
-            </el-col>
-            <el-col :span="6">
-              <div class="param-item">
-                <label>图像质量:</label>
-                <el-select v-model="cameraParams.quality" size="small" @change="updateCameraParams">
-                  <el-option label="低质量(流畅)" :value="0.3"></el-option>
-                  <el-option label="中等质量" :value="0.5"></el-option>
-                  <el-option label="高质量" :value="0.7"></el-option>
-                  <el-option label="最高质量" :value="0.9"></el-option>
-                </el-select>
-              </div>
-            </el-col>
-            <el-col :span="6">
-              <div class="param-item">
-                <label>智能跳帧:</label>
-                <el-switch v-model="cameraParams.skipFrames" @change="updateCameraParams"></el-switch>
-              </div>
-            </el-col>
-            <el-col :span="6">
-              <div class="param-item">
-                <label>保存结果:</label>
-                <el-switch v-model="cameraParams.saveResult"></el-switch>
-              </div>
-            </el-col>
-          </el-row>
         </div>
 
         <!-- 摄像头视频流显示 -->
@@ -662,21 +769,6 @@
       </el-card>
     </div>
 
-    <!-- 批量检测对话框 -->
-    <el-dialog title="批量图片检测" :visible.sync="batchDialogVisible" width="50%">
-      <el-form :model="batchForm" label-width="120px">
-        <el-form-item label="图片文件夹路径">
-          <el-input v-model="batchForm.folderPath" placeholder="请输入包含图片的文件夹路径，如：C:/Images/TestFolder"></el-input>
-        </el-form-item>
-      </el-form>
-      <span slot="footer" class="dialog-footer">
-        <el-button @click="batchDialogVisible = false">取 消</el-button>
-        <el-button type="primary" @click="handleBatchDetection" :loading="batchLoading">
-          {{ batchLoading ? '处理中...' : '开始检测' }}
-        </el-button>
-      </span>
-    </el-dialog>
-
     <!-- 批量图片查看对话框 -->
     <el-dialog title="检测结果详情" :visible.sync="imageViewVisible" width="80%">
       <div v-if="currentViewImage">
@@ -726,46 +818,6 @@
         <el-button @click="imageViewVisible = false">关 闭</el-button>
       </span>
     </el-dialog>
-
-    <!-- 新增：摄像头检测参数对话框 -->
-    <el-dialog title="摄像头检测设置" :visible.sync="cameraDialogVisible" width="40%">
-      <el-form :model="cameraParams" label-width="120px">
-        <el-form-item label="帧率控制">
-          <el-select v-model="cameraParams.fps" style="width: 100%">
-            <el-option label="5 FPS (省资源)" :value="5"></el-option>
-            <el-option label="10 FPS (流畅)" :value="10"></el-option>
-            <el-option label="15 FPS (推荐)" :value="15"></el-option>
-            <el-option label="20 FPS (高帧率)" :value="20"></el-option>
-            <el-option label="25 FPS (很高)" :value="25"></el-option>
-            <el-option label="30 FPS (最高)" :value="30"></el-option>
-          </el-select>
-        </el-form-item>
-        <el-form-item label="图像质量">
-          <el-select v-model="cameraParams.quality" style="width: 100%">
-            <el-option label="低质量 (更流畅)" :value="0.3"></el-option>
-            <el-option label="中等质量 (推荐)" :value="0.5"></el-option>
-            <el-option label="高质量" :value="0.7"></el-option>
-            <el-option label="最高质量 (更清晰)" :value="0.9"></el-option>
-          </el-select>
-        </el-form-item>
-        <el-form-item label="智能跳帧">
-          <el-switch v-model="cameraParams.skipFrames"></el-switch>
-          <div style="color: #909399; font-size: 12px; margin-top: 5px;">
-            开启后将在处理队列过长时自动跳过部分帧，提高流畅度
-          </div>
-        </el-form-item>
-        <el-form-item label="自动保存">
-          <el-switch v-model="cameraParams.saveResult"></el-switch>
-          <div style="color: #909399; font-size: 12px; margin-top: 5px;">
-            检测时长超过5秒时自动保存结果到数据库
-          </div>
-        </el-form-item>
-      </el-form>
-      <span slot="footer" class="dialog-footer">
-        <el-button @click="cameraDialogVisible = false">取 消</el-button>
-        <el-button type="primary" @click="startCameraDetection">开始检测</el-button>
-      </span>
-    </el-dialog>
   </div>
 </template>
 
@@ -774,6 +826,10 @@ export default {
   name: "Detection",
   data() {
     return {
+      // 当前模式
+      currentMode: 'image', // 'image', 'video', 'batch', 'camera'
+      selectedVideoOption: null, // 'upload' 或 'stream'
+
       imageLoading: false,
       videoLoading: false,
       batchLoading: false,
@@ -811,7 +867,6 @@ export default {
       streamPageSize: 20,
 
       // 批量检测
-      batchDialogVisible: false,
       batchForm: {
         folderPath: ''
       },
@@ -839,7 +894,6 @@ export default {
 
       // 摄像头检测
       cameraLoading: false,
-      cameraDialogVisible: false,
       cameraDetection: {
         show: false,
         active: false,
@@ -869,6 +923,10 @@ export default {
       fpsCounter: 0,
       fpsStartTime: Date.now()
     }
+  },
+  mounted() {
+    // 根据路由参数设置当前模式
+    this.initializeMode()
   },
   computed: {
     uploadUrl() {
@@ -901,6 +959,83 @@ export default {
     }
   },
   methods: {
+    // 🔥 新增：初始化模式
+    initializeMode() {
+      const mode = this.$route.query.mode
+      if (mode && ['image', 'video', 'batch', 'camera'].includes(mode)) {
+        this.currentMode = mode
+
+        // 如果是摄像头模式，直接显示摄像头检测界面
+        if (mode === 'camera') {
+          this.cameraDetection.show = true
+        }
+      }
+    },
+
+    // 🔥 新增：获取页面标题
+    getPageTitle() {
+      const titles = {
+        'image': 'YOLOv10 图片检测',
+        'video': 'YOLOv10 视频检测',
+        'batch': 'YOLOv10 批量检测',
+        'camera': 'YOLOv10 摄像头检测'
+      }
+      return titles[this.currentMode] || 'YOLOv10 火焰烟雾检测系统'
+    },
+
+    // 🔥 新增：获取页面副标题
+    getPageSubtitle() {
+      const subtitles = {
+        'image': '支持JPG、PNG等常见图片格式，快速识别图片中的火焰和烟雾',
+        'video': '支持MP4等视频格式，提供完整视频检测和实时流检测',
+        'batch': '支持批量处理文件夹中的多张图片，提高工作效率',
+        'camera': '实时摄像头监控检测，即时识别画面中的火焰和烟雾'
+      }
+      return subtitles[this.currentMode] || '基于YOLOv10深度学习算法，提供高精度的火焰和烟雾识别服务'
+    },
+
+    // 🔥 新增：返回主页
+    backToHome() {
+      this.$router.push('/front/home')
+    },
+
+    // 🔥 新增：选择视频选项
+    selectVideoOption(option) {
+      this.selectedVideoOption = option
+    },
+
+    // 🔥 新增：开始摄像头检测
+    async startCameraDetection() {
+      this.cameraLoading = true
+      this.cameraDetection.show = true
+
+      try {
+        // 生成会话ID
+        const sessionId = 'camera_' + Date.now()
+        this.cameraDetection.sessionId = sessionId
+
+        // 建立WebSocket连接
+        await this.connectWebSocket(sessionId)
+
+        // 启动摄像头检测会话
+        const response = await this.$request.post('/realtime/start-camera', {
+          sessionId: sessionId,
+          fps: this.cameraParams.fps,
+          quality: this.cameraParams.quality,
+          skipFrames: this.cameraParams.skipFrames
+        })
+
+        if (response.code === '200') {
+          this.$message.success('摄像头检测会话已启动')
+        }
+      } catch (error) {
+        console.error('启动摄像头检测失败:', error)
+        this.$message.error('启动摄像头检测失败')
+      } finally {
+        this.cameraLoading = false
+      }
+    },
+
     // 获取文件类型标签类型
     getFileTypeTagType(fileType) {
       switch(fileType) {
@@ -1132,13 +1267,7 @@ export default {
       this.currentBatchPage = val
     },
 
-    // 显示批量检测对话框
-    showBatchDialog() {
-      this.batchDialogVisible = true
-      this.batchForm.folderPath = ''
-    },
-
-    // 处理批量检测 - 修改后的版本
+    // 处理批量检测
     async handleBatchDetection() {
       if (!this.batchForm.folderPath.trim()) {
         this.$message.warning('请输入文件夹路径')
@@ -1154,10 +1283,7 @@ export default {
         })
 
         if (response.code === '200') {
-          this.batchDialogVisible = false
           this.$message.success(`批量检测完成！`)
-
-          // 直接在主页面显示批量检测结果
           this.showDetectionResult(response.data)
         } else {
           this.$message.error(response.msg || '批量检测失败')
@@ -1300,10 +1426,6 @@ export default {
       this.currentStreamPage = val
     },
 
-    // 🔥 新增：摄像头检测方法
-    showCameraDialog() {
-      this.cameraDialogVisible = true
-    },
     // 🔥 新增：格式化文件大小
     formatFileSize(bytes) {
       if (bytes === 0) return '0 B'
@@ -1341,38 +1463,6 @@ export default {
         setTimeout(() => {
           video.src = currentSrc
         }, 100)
-      }
-    },
-
-    async startCameraDetection() {
-      this.cameraDialogVisible = false
-      this.cameraLoading = true
-
-      try {
-        // 生成会话ID
-        const sessionId = 'camera_' + Date.now()
-        this.cameraDetection.sessionId = sessionId
-        this.cameraDetection.show = true
-
-        // 建立WebSocket连接
-        await this.connectWebSocket(sessionId)
-
-        // 启动摄像头检测会话
-        const response = await this.$request.post('/realtime/start-camera', {
-          sessionId: sessionId,
-          fps: this.cameraParams.fps,
-          quality: this.cameraParams.quality,
-          skipFrames: this.cameraParams.skipFrames
-        })
-
-        if (response.code === '200') {
-          this.$message.success('摄像头检测会话已启动')
-        }
-      } catch (error) {
-        console.error('启动摄像头检测失败:', error)
-        this.$message.error('启动摄像头检测失败')
-      } finally {
-        this.cameraLoading = false
       }
     },
 
@@ -1829,100 +1919,170 @@ export default {
 <style scoped>
 .detection-container {
   padding: 20px;
-  background-color: #f5f7fa;
+  background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
   min-height: calc(100vh - 120px);
 }
 
+/* 🔥 新增：顶部标题区域样式 */
 .header {
-  text-align: center;
-  margin-bottom: 30px;
-}
-
-.header h1 {
-  font-size: 28px;
-  font-weight: bold;
-  color: #2c3e50;
-  margin: 0;
-}
-
-.file-actions {
-  text-align: center;
-  margin-bottom: 30px;
-}
-
-.file-btn {
-  margin: 0 15px;
-  width: 200px;
-  height: 50px;
-  font-size: 16px;
-}
-
-/* 🔥 新增样式：实时处理相关 */
-.stream-processing, .camera-detection {
-  margin-bottom: 30px;
-}
-
-.stream-card, .camera-card {
-  margin-bottom: 20px;
-}
-
-.stream-header, .camera-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  margin-bottom: 30px;
+  padding: 25px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border-radius: 15px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
 }
 
-.stream-stats, .camera-stats {
-  margin: 20px 0;
+.header-content h1 {
+  font-size: 32px;
+  font-weight: 300;
+  margin: 0 0 8px 0;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
-.stat-item {
-  text-align: center;
-  padding: 15px;
+.page-subtitle {
+  font-size: 16px;
+  opacity: 0.9;
+  margin: 0;
 }
 
-.stat-label {
-  font-size: 14px;
-  color: #909399;
-  margin-bottom: 8px;
+.back-button .el-button {
+  background: rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  color: white;
+  backdrop-filter: blur(10px);
 }
 
-.stat-value {
-  font-size: 24px;
-  font-weight: bold;
+.back-button .el-button:hover {
+  background: rgba(255, 255, 255, 0.3);
+  border-color: rgba(255, 255, 255, 0.5);
+}
+
+/* 🔥 新增：动态功能区域样式 */
+.dynamic-actions {
+  margin-bottom: 30px;
+}
+
+.mode-section {
+  width: 100%;
+}
+
+.action-card {
+  border-radius: 15px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+  border: none;
+}
+
+.card-header {
+  display: flex;
+  align-items: center;
+  font-size: 18px;
+  font-weight: 600;
   color: #303133;
 }
 
-.stream-progress {
-  margin: 20px 0;
+.card-header i {
+  margin-right: 10px;
+  font-size: 20px;
+  color: #409eff;
 }
 
-.stream-result {
+/* 🔥 图片上传区域样式 */
+.upload-area {
+  padding: 20px;
+}
+
+.upload-content {
+  text-align: center;
+  padding: 40px 20px;
+}
+
+.upload-icon {
+  font-size: 64px;
+  color: #c0c4cc;
+  margin-bottom: 20px;
+}
+
+.upload-text p {
+  margin: 10px 0;
+  color: #303133;
+}
+
+.upload-hint {
+  color: #909399;
+  font-size: 12px;
+}
+
+/* 🔥 视频选项样式 */
+.video-options {
+  padding: 20px;
+}
+
+.option-card {
+  text-align: center;
+  padding: 30px 20px;
+  border: 2px solid #e4e7ed;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  height: 220px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.option-card:hover {
+  border-color: #409eff;
+  box-shadow: 0 4px 12px rgba(64, 158, 255, 0.15);
+  transform: translateY(-2px);
+}
+
+.option-icon {
+  font-size: 48px;
+  color: #409eff;
+  margin-bottom: 15px;
+}
+
+.option-card h3 {
+  font-size: 18px;
+  margin-bottom: 10px;
+  color: #303133;
+}
+
+.option-card p {
+  color: #606266;
+  font-size: 14px;
+  line-height: 1.5;
+  margin-bottom: 20px;
+}
+
+.upload-btn {
+  width: 100%;
+  margin-top: auto;
+}
+
+/* 🔥 批量处理样式 */
+.batch-form {
+  padding: 30px;
+}
+
+.batch-hint {
   margin-top: 20px;
 }
 
-.frame-info {
-  background-color: #f5f7fa;
-  padding: 15px;
-  border-radius: 4px;
-  margin: 15px 0;
-}
-
-.frame-display {
-  text-align: center;
-  margin-top: 15px;
-}
-
-.camera-controls {
-  display: flex;
-  gap: 10px;
+/* 🔥 摄像头设置样式 */
+.camera-setup {
+  padding: 20px;
 }
 
 .camera-params {
-  margin: 20px 0;
-  padding: 20px;
   background-color: #f5f7fa;
+  padding: 20px;
   border-radius: 8px;
+  margin-bottom: 20px;
 }
 
 .param-item {
@@ -1936,46 +2096,16 @@ export default {
   color: #606266;
 }
 
-.camera-streams {
-  margin: 20px 0;
-}
-
-.stream-container {
+.camera-controls {
   text-align: center;
 }
 
-.stream-container h4 {
-  margin-bottom: 15px;
-  color: #303133;
-}
-
-.result-display {
-  height: 300px;
-  border: 1px solid #ddd;
-  border-radius: 4px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background-color: #fafafa;
-}
-
-.no-result {
-  text-align: center;
-  color: #909399;
-}
-
-.no-result i {
-  font-size: 48px;
-  margin-bottom: 10px;
-}
-
-
-
+/* 以下为原有样式，保持不变 */
 .detection-result {
   background-color: #ffffff;
   padding: 25px;
-  border-radius: 8px;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
+  border-radius: 15px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
   margin-bottom: 20px;
 }
 
@@ -2033,7 +2163,7 @@ export default {
   text-align: center;
   padding: 20px;
   background-color: #fafafa;
-  border-radius: 4px;
+  border-radius: 8px;
   border: 1px solid #e4e7ed;
 }
 
@@ -2116,6 +2246,83 @@ export default {
   margin: 0 5px;
 }
 
+/* 🔥 实时处理相关样式 */
+.stream-processing, .camera-detection {
+  margin-bottom: 30px;
+}
+
+.stream-card, .camera-card {
+  margin-bottom: 20px;
+  border-radius: 15px;
+}
+
+.stream-header, .camera-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.stream-stats, .camera-stats {
+  margin: 20px 0;
+}
+
+.stream-progress {
+  margin: 20px 0;
+}
+
+.stream-result {
+  margin-top: 20px;
+}
+
+.frame-info {
+  background-color: #f5f7fa;
+  padding: 15px;
+  border-radius: 8px;
+  margin: 15px 0;
+}
+
+.frame-display {
+  text-align: center;
+  margin-top: 15px;
+}
+
+.camera-controls {
+  display: flex;
+  gap: 10px;
+}
+
+.camera-streams {
+  margin: 20px 0;
+}
+
+.stream-container {
+  text-align: center;
+}
+
+.stream-container h4 {
+  margin-bottom: 15px;
+  color: #303133;
+}
+
+.result-display {
+  height: 300px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #fafafa;
+}
+
+.no-result {
+  text-align: center;
+  color: #909399;
+}
+
+.no-result i {
+  font-size: 48px;
+  margin-bottom: 10px;
+}
 
 /deep/ .el-upload {
   display: inline-block;
@@ -2132,16 +2339,27 @@ export default {
 /deep/ .el-pagination {
   text-align: center;
 }
+
+/deep/ .el-upload-dragger {
+  width: 100%;
+  height: auto;
+  min-height: 180px;
+}
+
 /* 响应式设计 */
 @media (max-width: 768px) {
-  .file-btn {
-    width: 150px;
-    margin: 5px;
+  .header {
+    flex-direction: column;
+    text-align: center;
+    gap: 15px;
   }
 
   .camera-streams .el-col {
     margin-bottom: 20px;
   }
-}
 
+  .video-options .el-col {
+    margin-bottom: 20px;
+  }
+}
 </style>
