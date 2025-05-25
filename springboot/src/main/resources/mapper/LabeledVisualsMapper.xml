@@ -16,11 +16,11 @@
         from labeled_visuals
         <where>
             <if test="id != null"> and id = #{id}</if>
-            <if test="originalFileName != null"> and original_file_name like concat('%', #{originalFileName}, '%')</if>
-            <if test="fileType != null"> and file_type = #{fileType}</if>
-            <if test="status != null"> and status = #{status}</if>
+            <if test="originalFileName != null and originalFileName != ''"> and original_file_name like concat('%', #{originalFileName}, '%')</if>
+            <if test="fileType != null and fileType != ''"> and file_type = #{fileType}</if>
+            <if test="status != null and status != ''"> and status = #{status}</if>
             <if test="userId != null"> and user_id = #{userId}</if>
-            <if test="batchId != null"> and batch_id = #{batchId}</if>
+            <if test="batchId != null and batchId != ''"> and batch_id = #{batchId}</if>
         </where>
         order by created_time desc
     </select>
@@ -53,6 +53,26 @@
         <include refid="Base_Column_List" />
         from labeled_visuals
         where file_type = #{fileType}
+        order by created_time desc
+    </select>
+
+    <select id="selectByMultipleTypes" resultType="com.example.entity.LabeledVisuals">
+        select
+        <include refid="Base_Column_List" />
+        from labeled_visuals
+        <where>
+            <if test="param1.id != null"> and id = #{param1.id}</if>
+            <if test="param1.originalFileName != null and param1.originalFileName != ''"> and original_file_name like concat('%', #{param1.originalFileName}, '%')</if>
+            <if test="param1.status != null and param1.status != ''"> and status = #{param1.status}</if>
+            <if test="param1.userId != null"> and user_id = #{param1.userId}</if>
+            <if test="param1.batchId != null and param1.batchId != ''"> and batch_id = #{param1.batchId}</if>
+            <if test="param2 != null and param2.length > 0">
+                and file_type in
+                <foreach collection="param2" item="type" open="(" close=")" separator=",">
+                    #{type}
+                </foreach>
+            </if>
+        </where>
         order by created_time desc
     </select>
 

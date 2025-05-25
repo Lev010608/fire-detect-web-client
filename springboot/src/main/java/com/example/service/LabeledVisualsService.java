@@ -214,6 +214,16 @@ public class LabeledVisualsService {
     }
 
     /**
+     * 分页查询 - 支持多文件类型
+     */
+    public PageInfo<LabeledVisuals> selectPageByMultipleTypes(LabeledVisuals labeledVisuals, String[] fileTypes,
+                                                              Integer pageNum, Integer pageSize) {
+        PageHelper.startPage(pageNum, pageSize);
+        List<LabeledVisuals> list = labeledVisualsMapper.selectByMultipleTypes(labeledVisuals, fileTypes);
+        return PageInfo.of(list);
+    }
+
+    /**
      * 分页查询
      */
     public PageInfo<LabeledVisuals> selectPage(LabeledVisuals labeledVisuals, Integer pageNum, Integer pageSize) {

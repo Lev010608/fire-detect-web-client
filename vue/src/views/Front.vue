@@ -17,6 +17,7 @@
             <el-menu-item index="/front/home">首页</el-menu-item>
             <el-menu-item index="/front/detection">火焰检测</el-menu-item>
             <el-menu-item index="/front/person">个人中心</el-menu-item>
+            <el-menu-item index="/front/results">我的检测结果</el-menu-item>
           </el-menu>
         </div>
       </div>

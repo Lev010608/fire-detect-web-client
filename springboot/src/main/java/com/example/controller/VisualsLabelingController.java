@@ -645,14 +645,78 @@ public class VisualsLabelingController {
     // ===== 数据库CRUD操作 =====
 
     /**
-     * 查询检测记录列表
+     * 更新检测记录
+     */
+    @PutMapping("/records/update")
+    public Result updateRecord(@RequestBody LabeledVisuals labeledVisuals) {
+        try {
+            labeledVisualsService.updateById(labeledVisuals);
+            return Result.success();
+        } catch (Exception e) {
+            logger.error("更新检测记录失败", e);
+            return Result.error("500", "更新记录失败：" + e.getMessage());
+        }
+    }
+
+    /**
+     * 查询检测记录列表 - 支持多文件类型查询
      */
     @GetMapping("/records")
-    public Result getRecords(LabeledVisuals labeledVisuals,
+    public Result getRecords(@RequestParam(required = false) String originalFileName,
+                             @RequestParam(required = false) String fileType,
+                             @RequestParam(required = false) String status,
                              @RequestParam(defaultValue = "1") Integer pageNum,
                              @RequestParam(defaultValue = "10") Integer pageSize) {
-        PageInfo<LabeledVisuals> page = labeledVisualsService.selectPage(labeledVisuals, pageNum, pageSize);
-        return Result.success(page);
+        try {
+            logger.info("=== 查询检测记录 ===");
+            logger.info("文件名: " + originalFileName);
+            logger.info("文件类型: " + fileType);
+            logger.info("状态: " + status);
+            logger.info("页码: " + pageNum + ", 页大小: " + pageSize);
+
+            // 创建查询对象
+            LabeledVisuals queryParams = new LabeledVisuals();
+
+            // 设置查询参数，注意空字符串的处理
+            if (originalFileName != null && !originalFileName.trim().isEmpty()) {
+                queryParams.setOriginalFileName(originalFileName.trim());
+            }
+            if (status != null && !status.trim().isEmpty()) {
+                queryParams.setStatus(status.trim());
+            }
+
+            PageInfo<LabeledVisuals> page;
+
+            // 处理文件类型查询
+            if (fileType != null && !fileType.trim().isEmpty()) {
+                if (fileType.contains(",")) {
+                    // 多文件类型查询
+                    String[] types = fileType.split(",");
+                    // 清理每个类型字符串
+                    for (int i = 0; i < types.length; i++) {
+                        types[i] = types[i].trim();
+                    }
+                    logger.info("多文件类型查询: " + java.util.Arrays.toString(types));
+                    page = labeledVisualsService.selectPageByMultipleTypes(queryParams, types, pageNum, pageSize);
+                } else {
+                    // 单文件类型查询
+                    queryParams.setFileType(fileType.trim());
+                    logger.info("单文件类型查询: " + fileType.trim());
+                    page = labeledVisualsService.selectPage(queryParams, pageNum, pageSize);
+                }
+            } else {
+                // 查询所有类型
+                logger.info("查询所有类型");
+                page = labeledVisualsService.selectPage(queryParams, pageNum, pageSize);
+            }
+
+            logger.info("查询结果: 总数=" + page.getTotal() + ", 当前页数据=" + page.getList().size());
+            return Result.success(page);
+
+        } catch (Exception e) {
+            logger.error("查询检测记录失败", e);
+            return Result.error("500", "查询记录失败：" + e.getMessage());
+        }
     }
 
     /**

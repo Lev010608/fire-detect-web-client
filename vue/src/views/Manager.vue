@@ -33,7 +33,7 @@
     <div class="manager-main">
       <!--  侧边栏  -->
       <div class="manager-main-left">
-        <el-menu :default-openeds="['info', 'user']" router style="border: none" :default-active="$route.path">
+        <el-menu :default-openeds="['info', 'user','content']" router style="border: none" :default-active="$route.path">
           <el-menu-item index="/home">
             <i class="el-icon-s-home"></i>
             <span slot="title">系统首页</span>
@@ -56,8 +56,8 @@
             <template slot="title">
               <i class="el-icon-menu"></i><span>资产管理</span>
             </template>
-            <el-menu-item index="/admin">视频信息管理</el-menu-item>
-            <el-menu-item index="/user">图片信息管理</el-menu-item>
+            <el-menu-item index="/video">视频信息管理</el-menu-item>
+            <el-menu-item index="/picture">图片信息管理</el-menu-item>
           </el-submenu>
         </el-menu>
       </div>

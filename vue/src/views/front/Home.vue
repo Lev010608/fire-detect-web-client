@@ -111,7 +111,7 @@
             <el-col :span="8">
               <div class="status-item">
                 <div class="status-icon">
-                  <i class="el-icon-server"></i>
+                  <i class="el-icon-set-up"></i>
                 </div>
                 <div class="status-content">
                   <span class="status-label">后端服务</span>

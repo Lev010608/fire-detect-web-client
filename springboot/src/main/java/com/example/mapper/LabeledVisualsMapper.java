@@ -48,4 +48,9 @@ public interface LabeledVisualsMapper {
      * 根据文件类型查询
      */
     List<LabeledVisuals> selectByFileType(String fileType);
+
+    /**
+     * 根据多个文件类型查询
+     */
+    List<LabeledVisuals> selectByMultipleTypes(LabeledVisuals labeledVisuals, String[] fileTypes);
 }

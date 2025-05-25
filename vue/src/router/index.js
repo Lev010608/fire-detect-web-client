@@ -23,6 +23,9 @@ const routes = [
       { path: 'adminPerson', name: 'AdminPerson', meta: { name: '个人信息' }, component: () => import('../views/manager/AdminPerson') },
       { path: 'password', name: 'Password', meta: { name: '修改密码' }, component: () => import('../views/manager/Password') },
       { path: 'notice', name: 'Notice', meta: { name: '公告信息' }, component: () => import('../views/manager/Notice') },
+      //资产管理路由
+      { path: 'picture', name: 'Picture', meta: { name: '图片信息管理' }, component: () => import('../views/manager/Picture') },
+      { path: 'video', name: 'Video', meta: { name: '视频信息管理' }, component: () => import('../views/manager/Video') },
     ]
   },
   {
@@ -34,6 +37,7 @@ const routes = [
       { path: 'home', name: 'FrontHome', meta: { name: '系统首页' }, component: () => import('../views/front/Home') },
       { path: 'detection', name: 'Detection', meta: { name: '火焰检测' }, component: () => import('../views/front/Detection') },
       { path: 'person', name: 'FrontPerson', meta: { name: '个人信息' }, component: () => import('../views/front/Person') },
+      { path: 'results', name: 'Results', meta: { name: '我的检测结果' }, component: () => import('../views/front/Results') },
     ]
   },
   { path: '/login', name: 'Login', meta: { name: '登录' }, component: () => import('../views/Login.vue') },
@@ -49,21 +53,21 @@ const router = new VueRouter({
 
 // 注：不需要前台的项目，可以注释掉该路由守卫
 // 路由守卫
-// router.beforeEach((to ,from, next) => {
-//   let user = JSON.parse(localStorage.getItem("xm-user") || '{}');
-//   if (to.path === '/') {
-//     if (user.role) {
-//       if (user.role === 'USER') {
-//         next('/front/home')
-//       } else {
-//         next('/home')
-//       }
-//     } else {
-//       next('/login')
-//     }
-//   } else {
-//     next()
-//   }
-// })
+router.beforeEach((to ,from, next) => {
+  let user = JSON.parse(localStorage.getItem("xm-user") || '{}');
+  if (to.path === '/') {
+    if (user.role) {
+      if (user.role === 'USER') {
+        next('/front/home')
+      } else {
+        next('/home')
+      }
+    } else {
+      next('/login')
+    }
+  } else {
+    next()
+  }
+})
 
 export default router
