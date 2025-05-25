@@ -180,6 +180,11 @@ class VideoStreamProcessor:
                 "total_frames": total_frames
             }))
 
+            # 🔥 新增：统计信息
+            total_detections = 0
+            all_frame_results = []  # 存储所有帧的检测结果
+            processing_start_time = time.time()
+
             # 处理每一帧
             frame_id = 0
             while True:
@@ -217,6 +222,10 @@ class VideoStreamProcessor:
                             "class_name": class_name,
                             "confidence": float(conf)
                         })
+
+                # 🔥 累计检测统计
+                total_detections += len(detection_params)
+                all_frame_results.append(detection_params)
 
                 # 获取标注后的图像
                 annotated_frame = results.plot()
@@ -257,13 +266,37 @@ class VideoStreamProcessor:
             if video_writer:
                 video_writer.release()
 
-            # 发送完成消息
-            asyncio.run(websocket.send_json({
+            # 🔥 计算处理统计信息
+            processing_end_time = time.time()
+            total_processing_time = processing_end_time - processing_start_time
+
+            # 🔥 发送完成消息 - 包含完整信息
+            complete_message = {
                 "type": "processing_complete",
                 "client_id": client_id,
-                "frames_processed": frame_id,
-                "output_path": output_path if save_output else None
-            }))
+                "video_info": {
+                    "width": frame_width,
+                    "height": frame_height,
+                    "fps": fps,
+                    "duration": total_frames / fps if fps > 0 else 0
+                },
+                "processing_stats": {
+                    "frames_processed": frame_id,
+                    "total_frames": total_frames,
+                    "total_detections": total_detections,
+                    "processing_time_seconds": round(total_processing_time, 2),
+                    "processing_time_ms": round(total_processing_time * 1000, 2),
+                    "avg_inference_time": round((total_processing_time / frame_id * 1000), 2) if frame_id > 0 else 0
+                },
+                "output_info": {
+                    "output_path": output_path if save_output else None,
+                    "file_size": os.path.getsize(output_path) if (
+                                save_output and output_path and os.path.exists(output_path)) else 0
+                },
+                "detection_results": all_frame_results  # 所有帧的检测结果
+            }
+
+            asyncio.run(websocket.send_json(complete_message))
 
         except Exception as e:
             self.logger.error(f"Error in video processing thread for client {client_id}: {str(e)}")
